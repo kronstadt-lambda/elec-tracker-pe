@@ -1,0 +1,29 @@
+[project]
+name = "elec-tracker-pe"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "kronstadtFedora",email = "kronstadt.lambda@gmail.com"}
+]
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "playwright (>=1.58.0,<2.0.0)",
+    "python-dotenv (>=1.2.2,<2.0.0)",
+    "pandas (>=3.0.2,<4.0.0)",
+    "streamlit (>=1.56.0,<2.0.0)",
+    "plotly (>=6.7.0,<7.0.0)",
+    "numpy (>=2.4.4,<3.0.0)"
+]
+
+[tool.poetry]
+packages = [{include = "elec_tracker_pe", from = "src"}]
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[dependency-groups]
+dev = [
+    "pytest (>=9.0.3,<10.0.0)"
+]
