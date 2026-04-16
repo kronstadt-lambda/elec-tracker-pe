@@ -44,6 +44,14 @@ st.markdown("""
         margin-bottom: 15px;
         font-family: 'Arial', sans-serif;
     }
+    .warning-box {
+        background-color: #d7992120;
+        border-left: 5px solid #d79921;
+        padding: 15px;
+        margin-top: 25px;
+        margin-bottom: 25px;
+        border-radius: 4px;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -58,7 +66,7 @@ def fetch_cached_data():
     return df, df_proy, df_actas
 
 # ---------------------------------------------------------
-# MÓDULOS DE VISUALIZACIÓN
+# MÓDULOS DE VISUALIZACIÓN Y TEXTO
 # ---------------------------------------------------------
 def render_header(df_latest):
     st.markdown(f"### 📡 RADAR ELECTORAL · ACTUALIZADO: {df_latest['actualizado_dt'].iloc[0]} · CORTE ONPE: {df_latest['actas_contabilizadas_pct'].iloc[0]}%")
@@ -89,7 +97,7 @@ def render_bar_and_versus(df_latest):
         st.plotly_chart(fig_bar, use_container_width=True)
 
     with col_vs:
-        st.markdown("#### Comparador para el 2do Puesto (mas probable)")
+        st.markdown("#### Comparador para el 2do Puesto")
 
         cand1 = "RAFAEL BERNARDO LÓPEZ ALIAGA CAZORLA"
         cand2 = "ROBERTO HELBERT SANCHEZ PALOMINO"
@@ -119,8 +127,24 @@ def render_bar_and_versus(df_latest):
         else:
             st.info("Esperando datos de ambos candidatos para la comparación.")
 
+def render_projection_warning():
+    st.markdown("""
+    <div class="warning-box">
+        <h3 style="margin-top:0; color: #d79921 !important;">⚠️ ZONA DE PROYECCIÓN ESTADÍSTICA</h3>
+        <p style="font-family: 'Arial', sans-serif; font-size: 1rem; color: #ebdbb2;">
+            A partir de este punto, los gráficos y mapas <strong>NO representan resultados oficiales consolidados</strong>. Muestran estimaciones matemáticas generadas por el <b>Modelo de Proyección Espacial Asimétrica (PEA)</b>, el cual integra proactivamente tanto las actas pendientes de procesamiento como aquellas observadas y enviadas al <b>JEE</b>. Se asume que, bajo el comportamiento histórico de estas instancias electorales, las observaciones suelen ser desestimadas en su casi totalidad, por lo que se consideran íntegramente dentro del conteo final proyectado al 100%.<br><br>
+            <strong>Escenario Estructural:</strong> Esta proyección aplica factores de corrección que compensan el procesamiento tardío de actas. Por diseño, este escenario asume condiciones que <b>favorecen estadísticamente a un candidato de perfil rural frente a uno urbano</b>, ajustando el peso de los votos faltantes según la profundidad geográfica de las provincias por procesar.<br><br>
+            <a href="#metodologia-de-proyeccion" style="color: #fe8019; font-weight: bold; text-decoration: underline;">[ Leer Metodología Técnica Detallada ↓ ]</a>
+        </p>
+        <hr style="border-color: #504945; margin: 10px 0;">
+        <p style="font-family: 'Arial', sans-serif; font-size: 0.85rem; color: #a89984; margin-bottom: 0;">
+            <em><b>Aviso Legal y de Fuente:</b> Esta metodología utiliza como insumo exclusivo los datos crudos extraídos mediante scraping directo de la plataforma pública de la ONPE en tiempo real. Cualquier recategorización oficial de actas, modificacion de datos, anulación de mesas por el JEE o caída temporal del sistema oficial alterará la base de datos e impactará automáticamente en la sensibilidad y resultados de esta proyección.</em>
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
 def render_spatial_module(df_proy):
-    st.markdown("#### 🗺️ Caudal Faltante (Inteligencia Espacial)")
+    st.markdown("#### 🗺️ Caudal de votos válidos faltantes proyectados por provincia y continente")
 
     if df_proy.empty:
         st.info("Esperando proyecciones territoriales...")
@@ -136,7 +160,6 @@ def render_spatial_module(df_proy):
         return
 
     df_map['Parent_Region'] = df_map['ubicacion_clean'].map(province_to_region_map).replace({"CUZCO": "CUSCO"})
-
     df_map_provincial_audit = df_map.copy()
 
     tipo_mapa = st.radio("Alternar Vista:", ["🇵🇪 PERÚ (Regiones)", "🏙️ LIMA Y CALLAO", "🌍 EXTRANJERO"], horizontal=True, key="spatial_vista")
@@ -219,7 +242,11 @@ def render_spatial_module(df_proy):
 
         map_event = st.plotly_chart(fig_map, use_container_width=True, on_select="rerun", selection_mode="points", key="mapa_extranjero")
         reg_list = sorted(df_reg['Parent_Region'].unique())
-        sel_target = map_event.selection.points[0]["location"] if map_event and len(map_event.selection.points) > 0 else (reg_list[0] if len(reg_list) > 0 else None)
+        if map_event and len(map_event.selection.points) > 0:
+            pt = map_event.selection.points[0]
+            sel_target = pt.get("customdata", [pt.get("text", reg_list[0])])[0]
+        else:
+            sel_target = reg_list[0] if len(reg_list) > 0 else None
 
         if sel_target:
             df_det = df_reg[df_reg['Parent_Region'] == sel_target]
@@ -248,7 +275,7 @@ def render_spatial_module(df_proy):
         colores_candidatos_cortos = {NOMBRES_CORTOS[k]: v for k, v in CANDIDATOS_TARGET.items() if k in NOMBRES_CORTOS}
 
         fig_tree = px.treemap(
-            df_det, path=[px.Constant("Proporción Regional"), 'nombre_corto'],
+            df_det, path=[px.Constant("Proporción Regional proyectada de votos válidos"), 'nombre_corto'],
             values='votos_proyectados_faltantes', color='nombre_corto',
             color_discrete_map=colores_candidatos_cortos, custom_data=['porcentaje', 'votos_proyectados_faltantes', 'nombre_corto']
         )
@@ -289,7 +316,7 @@ def render_spatial_module(df_proy):
 
                 st.dataframe(pivot_provs, use_container_width=True)
 
-def render_projections_and_layout(df_filtrado, min_x, dict_proy_abs, dict_proy_pct, df_proy):
+def render_projections_and_layout(df_filtrado, min_x, dict_proy_abs, dict_proy_pct, df_proy, margin_of_error):
     fig_pct = from_plotly.Figure()
     fig_abs = from_plotly.Figure()
 
@@ -332,6 +359,9 @@ def render_projections_and_layout(df_filtrado, min_x, dict_proy_abs, dict_proy_p
             p_pct = dict_proy_pct[candidato]
             p_abs = dict_proy_abs[candidato]
 
+            moe_pct = margin_of_error.get(candidato, {}).get('pct', 0.0)
+            moe_abs = margin_of_error.get(candidato, {}).get('abs', 0.0)
+
             ay_offset = ay_opts[i % len(ay_opts)]
             ax_start = ax_start_opts[i % len(ax_start_opts)]
             ax_end = ax_end_opts[i % len(ax_end_opts)]
@@ -352,8 +382,18 @@ def render_projections_and_layout(df_filtrado, min_x, dict_proy_abs, dict_proy_p
             fig_pct.add_trace(from_plotly.Scatter(x=steps_x, y=steps_y_pct, mode='lines+markers', line=dict(color=color, width=2.5, dash='dot'), marker=dict(size=5, opacity=0.8), showlegend=False))
             fig_abs.add_trace(from_plotly.Scatter(x=steps_x, y=steps_y_abs, mode='lines+markers', line=dict(color=color, width=2.5, dash='dot'), marker=dict(size=5, opacity=0.8), showlegend=False))
 
-            fig_pct.add_trace(from_plotly.Scatter(x=[100], y=[p_pct], mode='markers', marker=dict(size=14, symbol='star', color=color), showlegend=False))
-            fig_abs.add_trace(from_plotly.Scatter(x=[100], y=[p_abs], mode='markers', marker=dict(size=14, symbol='star', color=color), showlegend=False))
+            fig_pct.add_trace(from_plotly.Scatter(
+                x=[100], y=[p_pct], mode='markers',
+                marker=dict(size=14, symbol='star', color=color),
+                error_y=dict(type='data', array=[moe_pct], visible=True, color=color, thickness=2, width=5),
+                showlegend=False
+            ))
+            fig_abs.add_trace(from_plotly.Scatter(
+                x=[100], y=[p_abs], mode='markers',
+                marker=dict(size=14, symbol='star', color=color),
+                error_y=dict(type='data', array=[moe_abs], visible=True, color=color, thickness=2, width=5),
+                showlegend=False
+            ))
 
             fig_pct.add_annotation(
                 x=100, y=p_pct, text=f"<b>{p_pct:.2f}%</b>",
@@ -362,8 +402,9 @@ def render_projections_and_layout(df_filtrado, min_x, dict_proy_abs, dict_proy_p
             )
 
             txt_abs = f'{p_abs/1000000:.2f}M' if p_abs >= 1000000 else f'{p_abs:,.0f}'
+            moe_abs_txt = f"{moe_abs/1000:.1f}K" if moe_abs > 1000 else f"{moe_abs:.0f}"
             fig_abs.add_annotation(
-                x=100, y=p_abs, text=f"<b>{txt_abs}</b>",
+                x=100, y=p_abs, text=f"<b>{txt_abs} ±{moe_abs_txt}</b>",
                 showarrow=True, arrowhead=2, arrowsize=1, arrowwidth=1, arrowcolor="black", ax=ax_end, ay=ay_offset,
                 font=dict(size=18, color=color), bgcolor="rgba(255,255,255,0.9)", bordercolor=color, borderwidth=1
             )
@@ -398,7 +439,9 @@ def render_projections_and_layout(df_filtrado, min_x, dict_proy_abs, dict_proy_p
                 'Candidato': cand,
                 'Nombre': NOMBRES_CORTOS.get(cand, cand),
                 'Porcentaje': dict_proy_pct[cand],
-                'Votos': dict_proy_abs[cand]
+                'Votos': dict_proy_abs[cand],
+                'Error_Pct': margin_of_error.get(cand, {}).get('pct', 0.0),
+                'Error_Abs': margin_of_error.get(cand, {}).get('abs', 0.0)
             })
         df_final = pd.DataFrame(datos_finales)
         df_final = df_final.sort_values('Porcentaje', ascending=True).reset_index(drop=True)
@@ -417,12 +460,13 @@ def render_projections_and_layout(df_filtrado, min_x, dict_proy_abs, dict_proy_p
                 etiquetas.append(nombre_base)
 
         df_final['Etiqueta'] = etiquetas
-        df_final['Texto_Barra'] = df_final.apply(lambda r: f"<b>{r['Porcentaje']:.2f}%</b> ({r['Votos']:,.0f})", axis=1)
+        df_final['Texto_Barra'] = df_final.apply(lambda r: f"<b>{r['Porcentaje']:.2f}% ±{r['Error_Pct']:.2f}%</b> ({r['Votos']:,.0f} ±{r['Error_Abs']:,.0f})", axis=1)
 
         fig_bar_final = px.bar(
             df_final, x='Porcentaje', y='Etiqueta', orientation='h',
             color='Candidato', color_discrete_map=CANDIDATOS_TARGET,
-            text='Texto_Barra'
+            text='Texto_Barra',
+            error_x='Error_Pct'
         )
 
         opacidades = [0.6 if i < n-2 else 1.0 for i in range(n)]
@@ -431,13 +475,15 @@ def render_projections_and_layout(df_filtrado, min_x, dict_proy_abs, dict_proy_p
             insidetextanchor='end',
             textfont=dict(size=15, color="#ebdbb2"),
             marker=dict(line=dict(color='#282828', width=1)),
-            marker_opacity=opacidades
+            marker_opacity=opacidades,
+            error_x=dict(thickness=2)
         )
 
+        max_x = (df_final['Porcentaje'] + df_final['Error_Pct']).max() * 1.35
         fig_bar_final.update_layout(
             plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
             font=dict(family="VT323", size=18, color="#ebdbb2"),
-            xaxis=dict(showgrid=True, gridcolor="#504945", range=[0, df_final['Porcentaje'].max() * 1.25], title=""),
+            xaxis=dict(showgrid=True, gridcolor="#504945", range=[0, max_x], title=""),
             yaxis=dict(title=""),
             showlegend=False,
             height=400,
@@ -451,14 +497,14 @@ def render_projections_and_layout(df_filtrado, min_x, dict_proy_abs, dict_proy_p
         st.plotly_chart(fig_pct, use_container_width=True)
         st.plotly_chart(fig_abs, use_container_width=True)
         if fig_bar_final:
-            st.markdown("<h4 style='color:#ebdbb2;'>🏁 Resumen de Posiciones al 100%</h4>", unsafe_allow_html=True)
+            st.markdown(f"<h4 style='color:#ebdbb2;'>🏁 Resumen de Posiciones al 100% (Proyección con Margen de Error al 95%)</h4>", unsafe_allow_html=True)
             st.plotly_chart(fig_bar_final, use_container_width=True)
     with col_mapas:
         render_spatial_module(df_proy)
 
 def render_bottom_totals(df_proy):
     st.markdown("---")
-    st.markdown("### 🧮 Total del Bolsón Nacional + Extranjero (Votos en Disputa)")
+    st.markdown("### 🧮 Total del Bolsón Nacional + Extranjero (Votos Válidos en Disputa proyectados)")
     if df_proy.empty: return
 
     unwanted_terms = ['VOTOS EN BLANCO', 'VOTOS NULOS', 'total de votos']
@@ -521,7 +567,7 @@ def render_bottom_totals(df_proy):
 
     st.plotly_chart(fig1, use_container_width=True)
 
-    st.markdown("### 🌎 Composición del Bolsón por Vertiente Geográfica")
+    st.markdown("### 🌎 Composición del Bolsón por Vertiente Geográfica (Votos Válidos en Disputa proyectados)")
 
     fig2 = px.bar(
         df_totals, x='Vertiente', y='votos_proyectados_faltantes', color='nombre_corto',
@@ -554,7 +600,8 @@ def render_bottom_totals(df_proy):
 def render_legal_strategy_map(df_proy, df_actas):
     st.markdown("---")
     st.markdown("### ⚖️ Mapa de Estrategia Legal y Defensa del Voto")
-    st.markdown("Identifica las zonas de batalla legal (Actas JEE/Pendientes) coloreadas por el candidato que lidera la **base de votación validada**, ideal para asignar recursos y priorizar impugnaciones.")
+    st.markdown("Identifica las zonas de batalla legal (Actas JEE/Pendientes) coloreadas por el candidato que lidera la **base de votación validada** por provincia y continente, ideal para asignar recursos y priorizar nulidad de actas.")
+    st.markdown("Se prioriza el enfoque entre Rafael Lopez Aliaga y Roberto Sanchez dado que pelean por el segundo puesto.")
 
     if df_proy.empty or df_actas.empty:
         st.info("Esperando datos de proyecciones y actas JEE...")
@@ -575,7 +622,7 @@ def render_legal_strategy_map(df_proy, df_actas):
 
     col_ctrl1, col_ctrl2 = st.columns(2)
     with col_ctrl1:
-        metrica_sel = st.radio("Foco Legal a Visualizar:", ["⚖️ Actas en JEE (Impugnadas)", "🕒 Actas Pendientes (Por Procesar)"], horizontal=True)
+        metrica_sel = st.radio("Foco Legal a Visualizar:", ["⚖️ Actas en JEE (Observadas)", "🕒 Actas Pendientes (Por Procesar)"], horizontal=True)
     with col_ctrl2:
         vista_sel = st.radio("Escenario Geográfico:", ["🇵🇪 PERÚ (Provincias)", "🏙️ LIMA Y CALLAO", "🌍 EXTRANJERO"], horizontal=True, key="legal_vista")
 
@@ -598,7 +645,6 @@ def render_legal_strategy_map(df_proy, df_actas):
     province_to_region_map, region_set, province_set, continents_set = get_geo_mapping()
     df_mapa['Parent_Region'] = df_mapa['ubicacion_clean'].map(province_to_region_map).replace({"CUZCO": "CUSCO"})
 
-    # Inicializamos la variable de la figura del mapa para asegurarnos de que exista
     fig_map = None
 
     if "PERÚ" in vista_sel:
@@ -644,9 +690,6 @@ def render_legal_strategy_map(df_proy, df_actas):
         fig_map.update_geos(showcoastlines=True, coastlinecolor="#504945", showland=True, landcolor="#3c3836", showocean=True, oceancolor="#282828", bgcolor="rgba(0,0,0,0)")
         fig_map.update_layout(margin={"r":0,"t":0,"l":0,"b":0}, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", height=550)
 
-    # ---------------------------------------------------------
-    # RENDERIZADO DEL MAPA Y GRÁFICOS DE BARRAS EN COLUMNAS
-    # ---------------------------------------------------------
     if fig_map is not None:
         col_map, col_bars = st.columns([1.2, 1])
 
@@ -654,12 +697,10 @@ def render_legal_strategy_map(df_proy, df_actas):
             st.plotly_chart(fig_map, use_container_width=True)
 
         with col_bars:
-            st.markdown(f"#### 📊 Balance de Actas en el mapa seleccionado")
+            st.markdown(f"#### 📊 Balance de Actas Totales en el mapa seleccionado")
 
-            # Resumen de datos usando la vista actual (df_plot)
             df_summary_raw = df_plot[df_plot['Lider_Corto'].isin([cand1_corto, cand2_corto])].groupby('Lider_Corto')[['actas_jee', 'actas_pendientes']].sum().reset_index()
 
-            # Aseguramos que ambos candidatos existan en el DataFrame para que se rendericen incluso si tienen 0 actas
             res = []
             for c in [cand1_corto, cand2_corto]:
                 row = df_summary_raw[df_summary_raw['Lider_Corto'] == c]
@@ -670,7 +711,6 @@ def render_legal_strategy_map(df_proy, df_actas):
 
             df_summary = pd.DataFrame(res)
 
-            # Gráfica 1: Actas en JEE
             df_jee_sorted = df_summary.sort_values('actas_jee', ascending=True)
             fig_jee = px.bar(
                 df_jee_sorted, x='actas_jee', y='Lider_Corto', color='Lider_Corto',
@@ -685,9 +725,8 @@ def render_legal_strategy_map(df_proy, df_actas):
             fig_jee.update_traces(textposition='outside', textfont=dict(color="#ebdbb2"))
             st.plotly_chart(fig_jee, use_container_width=True)
 
-            st.markdown("<br>", unsafe_allow_html=True) # Espaciado
+            st.markdown("<br>", unsafe_allow_html=True)
 
-            # Gráfica 2: Actas Pendientes
             df_pend_sorted = df_summary.sort_values('actas_pendientes', ascending=True)
             fig_pend = px.bar(
                 df_pend_sorted, x='actas_pendientes', y='Lider_Corto', color='Lider_Corto',
@@ -702,6 +741,34 @@ def render_legal_strategy_map(df_proy, df_actas):
             fig_pend.update_traces(textposition='outside', textfont=dict(color="#ebdbb2"))
             st.plotly_chart(fig_pend, use_container_width=True)
 
+def render_methodology_section():
+    st.markdown("<a id='metodologia-de-proyeccion'></a>", unsafe_allow_html=True)
+    st.markdown("---")
+    st.markdown("## 🔍 Metodología: Modelo de Proyección Espacial Asimétrica (PEA)")
+    st.markdown("""
+    Esta herramienta utiliza un enfoque determinista con *priors* sociodemográficos para proyectar el resultado final de la elección a partir de los datos crudos e incompletos de la ONPE.
+    
+    ### 1. Procesamiento del Bolsón de Votos Faltantes
+    Para calcular cuántos votos quedan realmente en juego (el "Bolsón"), el modelo no asume una asistencia perfecta. En cambio, realiza un ajuste dinámico por provincia:
+    * Extrae la cantidad total de actas pendientes y las actas enviadas al JEE (asumiendo un escenario optimista donde el 100% son recuperables).
+    * Multiplica estas actas por el promedio histórico de electores por acta en dicha zona.
+    * Aplica un descuento utilizando la **Tasa de Ausentismo** específica de esa provincia.
+    
+    $$ \text{Votos Faltantes} = (\text{Actas}_{JEE} + \text{Actas}_{Pend}) \\times \\left( \\frac{\text{Electores Totales}}{\text{Actas Totales}} \\right) \\times (1 - \text{Tasa Ausentismo}) $$
+    
+    ### 2. Algoritmo de Proyección Estructural (Corrección de Sesgos)
+    El modelo reconoce que las actas que tardan más en llegar al centro de cómputo provienen de zonas geográficamente más profundas y aisladas. Por ende, no proyecta linealmente, sino que inyecta variables de distorsión:
+    * **Penalidad por Ruralidad:** Asume estadísticamente que las zonas restantes dentro de una provincia tienen mayor ruralidad que las zonas urbanas ya procesadas, favoreciendo a los candidatos con fuerza en el "Perú profundo".
+    * **Amortiguador de Voto Duro:** Suaviza la caída de los candidatos rurales cuando el modelo proyecta zonas puramente urbanas, respetando su núcleo duro de votantes. Este ajuste se sustenta en la hipótesis sociodemográfica de que es significativamente más probable que votantes de origen provincial migren y residan en núcleos urbanos (conservando su identidad de voto) a que ocurra el fenómeno inverso.
+    * **Factor de Canibalización:** Frena matemáticamente el crecimiento irreal en las ciudades, simulando la fragmentación del voto entre candidatos de perfil urbano que compiten por el mismo electorado.
+    
+    ### 3. Cuantificación del Margen de Error
+    Para calcular el error estadístico a nivel nacional, se emplea la fórmula de **Propagación de Varianza de Proporciones Multinomiales**. Debido a que el volumen de votos faltantes ($N_i$) y la probabilidad del candidato ($p_i$) varían por cada provincia, la varianza se calcula localmente y luego se acumula para extraer la desviación estándar nacional.
+    
+    $$ E_{nac} = 1.96 \\times \\frac{\\sqrt{\\sum_{i=1}^{n} [N_{i} \\times p_{i}(1 - p_{i})]}}{N_{total}} $$
+    
+    *Donde $E_{nac}$ representa el margen de error para un nivel de confianza del 95%. Este margen representa estrictamente la volatilidad estadística (error de muestreo) bajo la suposición de que los parámetros del modelo son exactos.*
+    """)
 
 # ---------------------------------------------------------
 # ORQUESTADOR PRINCIPAL (ENVUELTO EN FRAGMENTO DE RECARGA AUTOMÁTICA)
@@ -721,8 +788,12 @@ def auto_refresh_dashboard():
     render_header(df_latest)
     render_bar_and_versus(df_latest)
 
+    # <-- NUEVO: Alerta visual de separación y metodología
+    render_projection_warning()
+
     proy_100_abs = {}
     proy_100_pct = {}
+    margin_of_error = {}
 
     if not df_proy.empty:
         unwanted_terms = ['VOTOS EN BLANCO', 'VOTOS NULOS', 'total de votos']
@@ -744,11 +815,27 @@ def auto_refresh_dashboard():
                 proy_100_abs[cand] = votos_finales_cand
                 proy_100_pct[cand] = pct_final_cand
 
-    render_projections_and_layout(df_filtrado, df_filtrado['actas_contabilizadas_pct'].min(), proy_100_abs, proy_100_pct, df_proy)
-    render_bottom_totals(df_proy)
+                # --- CÁLCULO ESTADÍSTICO DE INCERTIDUMBRE (Propagación de Varianza) ---
+                df_cand_proy = df_proy[df_proy['candidato_o_tipo'] == cand]
+                var_sum = 0.0
 
-    # Invocación de la nueva vista táctica
+                for _, row in df_cand_proy.iterrows():
+                    n_i = float(row.get('votantes_validos_pendientes_est', 0))
+                    p_i = float(row.get('porcentaje_valido_usado_prior', 0)) / 100.0
+                    if n_i > 0 and pd.notna(p_i):
+                        var_sum += n_i * p_i * (1.0 - p_i)
+
+                moe_abs = 1.96 * np.sqrt(var_sum) if var_sum > 0 else 0
+                moe_pct = (moe_abs / total_nacional_proyectado_100) * 100.0 if total_nacional_proyectado_100 > 0 else 0
+
+                margin_of_error[cand] = {'abs': moe_abs, 'pct': moe_pct}
+
+    render_projections_and_layout(df_filtrado, df_filtrado['actas_contabilizadas_pct'].min(), proy_100_abs, proy_100_pct, df_proy, margin_of_error)
+    render_bottom_totals(df_proy)
     render_legal_strategy_map(df_proy, df_actas)
+
+    # <-- NUEVO: Bloque de texto con la metodología matemática
+    render_methodology_section()
 
 # Llamada principal a la aplicación
 auto_refresh_dashboard()
