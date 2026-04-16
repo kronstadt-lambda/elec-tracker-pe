@@ -31,6 +31,7 @@ journalctl --user -u onpe-tracker-peru.service -f
 
 Para ejecutar el servicio de dashboard, se debe ejecutar el siguiente comando:
 poetry run streamlit run src/elec_tracker_pe/dashboard.py
+poetry run streamlit run src/elec_tracker_pe/dashboard_publico.py
 
 Para ejecutar el servicio de affinity calculator, se debe ejecutar el siguiente comando:
 poetry run python -m src.elec_tracker_pe.affinity_calculator

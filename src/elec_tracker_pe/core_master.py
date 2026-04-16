@@ -52,7 +52,7 @@ class ONPEMasterScraper:
                 current_date = clean_onpe_date(date_text)
 
                 if current_date != self.last_known_date:
-                    print(f"\n🚨 [{self.target.upper()}] NUEVA ACTUALIZACIÓN MAESTRA: {current_date}", flush=True)
+                    print(f"\n🚨 [{self.target.upper()}] NUEVA ACTUALIZACIÓN GRANULAR: {current_date}", flush=True)
                     self.last_known_date = current_date
                     await browser.close()
                     return True
@@ -79,16 +79,13 @@ class ONPEMasterScraper:
                 await page_pc.goto(self.url_pc, timeout=60000)
 
                 for p in [page_pre, page_pc]:
-                    if tipo == "TODOS":
-                        await self._select_option(p, "region", "TODOS")
-                    elif tipo == "PERÚ":
+                    if tipo == "PERÚ":
                         await self._select_option(p, "region", "PERÚ")
                         await self._select_option(p, "department", nivel1)
                         await self._select_option(p, "province", nivel2)
                     elif tipo == "EXTRANJERO":
                         await self._select_option(p, "region", "EXTRANJERO")
                         if nivel1:
-                            # CORRECCIÓN: El formcontrolname correcto para continentes es 'continent'
                             await self._select_option(p, "continent", nivel1)
 
                 date_pre = clean_onpe_date(await page_pre.locator('.actualizado b').inner_text())
@@ -133,7 +130,6 @@ class ONPEMasterScraper:
                                 pct_emitido = (await fila.locator('.cant.cant-pc b').first.text_content()).strip()
                                 votos_totales = (await fila.locator('.titulo_votos_totales__num2').first.text_content()).strip()
 
-                        # Identificador para la fila
                         ubicacion_str = nivel2 if nivel2 else (nivel1 if nivel1 else "TODOS")
 
                         row = {
@@ -190,28 +186,23 @@ class ONPEMasterScraper:
 
     async def run_full_extraction(self):
         self.current_extraction_date = self.last_known_date
-        print(f"⚙️ Iniciando extracción para target: {self.target.upper()}", flush=True)
+        print(f"⚙️ Iniciando extracción granular para target: {self.target.upper()}", flush=True)
 
         async with async_playwright() as p:
             browser = await p.chromium.launch(headless=True)
             self.completed_tasks = 0
 
-            # CALCULAR TOTALES SEGÚN TARGET
+            # CALCULAR TOTALES SEGÚN TARGET (MACRO FUE REMOVIDO DE AQUÍ)
             self.total_tasks = 0
             if self.target in ['peru', 'all']:
-                self.total_tasks += 1 # MACRO
                 self.total_tasks += sum(len(provs) for provs in self.geo_data.get("PERU", {}).values())
             if self.target in ['extranjero', 'all']:
                 self.total_tasks += len(self.geo_data.get("EXTRANJERO", {}).keys())
 
             # ---------------------------------------------------------
-            # BLOQUE 1: PERÚ (Concurrencia Dinámica por Región) + MACRO
+            # BLOQUE 1: PERÚ (Concurrencia Dinámica por Región)
             # ---------------------------------------------------------
             if self.target in ['peru', 'all']:
-                print("  🌍 Extrayendo MACRO (Secuencial)...", flush=True)
-                sem_single = asyncio.Semaphore(1)
-                await self._scrape_target_task(browser, sem_single, tipo="TODOS")
-
                 print("  🇵🇪 Iniciando PERÚ (Ráfagas dinámicas por Región)...", flush=True)
                 for region, provincias in self.geo_data.get("PERU", {}).items():
                     num_provincias = len(provincias)
@@ -248,12 +239,12 @@ class ONPEMasterScraper:
         pd.DataFrame(data).to_csv(filename, index=False, encoding='utf-8')
 
 async def main():
-    parser = argparse.ArgumentParser(description="ONPE Electoral Tracker")
+    parser = argparse.ArgumentParser(description="ONPE Electoral Tracker - GRANULAR")
     parser.add_argument('--target', type=str, choices=['peru', 'extranjero', 'all'], default='all', help="Define qué bloque descargar")
     args = parser.parse_args()
 
     scraper = ONPEMasterScraper(target=args.target)
-    print(f"🛡️ Tracker Maestro Iniciado. Modo: {args.target.upper()}", flush=True)
+    print(f"🛡️ Tracker Maestro Granular Iniciado. Modo: {args.target.upper()}", flush=True)
 
     while True:
         try:

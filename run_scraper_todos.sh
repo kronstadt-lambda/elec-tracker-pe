@@ -7,5 +7,4 @@ cd /home/klambda/My_Projects/elec-tracker-pe/
 mkdir -p logs
 
 # Ejecutar el scraper usando Poetry
-# Usamos la ruta completa de poetry para evitar errores de entorno
-/home/klambda/.local/bin/poetry run python -m src.elec_tracker_pe.core >> logs/scheduler.log 2>&1
+/home/klambda/.local/bin/poetry run python -m src.elec_tracker_pe.core_todos >> logs/scheduler_todos.log 2>&1

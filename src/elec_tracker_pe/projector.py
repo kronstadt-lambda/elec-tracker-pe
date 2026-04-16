@@ -2,7 +2,7 @@ import json
 import pandas as pd
 from pathlib import Path
 from datetime import datetime
-from .config import DATA_DIR
+from .config import DATA_DIR # Asegúrate que la importación relativa/absoluta esté bien según tu proyecto
 
 class ElectionProjector:
     def __init__(self):
@@ -16,13 +16,35 @@ class ElectionProjector:
         self.prov_to_region = {}
         self.afinidad_data = {"provincias": {}, "candidatos": {}}
 
-        # Parámetros del Prior de Distorsión
-        self.DISTORSION_MAX_PCT = 8.0
+        # ===============================================================
+        # PARÁMETROS DE SESGO Y DISTORSIÓN (AJUSTABLES CENTRALIZADOS)
+        # ===============================================================
 
-        # ARRAY DE PENALIDADES (Análisis de Sensibilidad)
-        # 0.0 = El bolsón faltante es igual de rural que la provincia.
-        # 0.6 = El bolsón faltante es extremadamente más rural que la provincia.
-        self.RURAL_PENALTIES = [0.0, 0.1, 0.2]
+        # 1. Sesgo de Profundidad Rural: Asume estadísticamente que las actas
+        # faltantes provienen de zonas más alejadas/rurales dentro de la provincia.
+        # Hacia arriba (ej. 0.2): El modelo asume que las actas que faltan vienen de zonas extremadamente aisladas ("Perú profundo"). Esto favorece mucho a los candidatos rurales y castiga más fuerte a los urbanos.
+        # Hacia abajo (ej. 0.0): El modelo asume que el voto restante es idéntico al ya contado. La proyección se vuelve más lineal y neutral.
+        self.RURAL_PENALTY = 0.1
+
+        # 2. Distorsión Máxima: Tope porcentual de variación que permite el modelo.
+        # Es el "volumen" o la sensibilidad general de todo el ajuste.
+        # Hacia arriba (ej. 15.0): Las proyecciones se vuelven muy volátiles y "valientes". Pequeñas diferencias de afinidad causarán grandes cambios en los porcentajes finales.
+        # Hacia abajo (ej. 3.0): El modelo se vuelve muy conservador. Los porcentajes proyectados se mantendrán muy cerca de los valores actuales que reporta la ONPE.
+        self.DISTORSION_MAX_PCT = 5.0
+
+        # 3. Amortiguador Voto Duro (CASO A: Candidato Rural en Zona Urbana):
+        # Suaviza la caída del candidato rural protegiendo su núcleo duro de votantes.
+        # Hacia arriba (ej. 0.8): Menos protección. El candidato rural perderá porcentaje rápidamente en las proyecciones de zonas urbanas.
+        # Hacia abajo (ej. 0.1): Más protección. El modelo asume que el candidato rural tiene un "voto duro" que no baja de cierto nivel, aunque la zona proyectada sea muy urbana.
+        self.AMORTIGUADOR_VOTO_DURO = 0.4
+
+        # 4. Factor Canibalización (CASO B: Candidato Urbano en Zona Urbana):
+        # Frena el crecimiento irreal por alta competencia reteniendo solo una fracción del ajuste.
+        # Hacia arriba (ej. 0.9): Crecimiento libre. El candidato urbano capturará casi todo el "bonus" de votos proyectados en las ciudades.
+        # Hacia abajo (ej. 0.2): Crecimiento limitado. El modelo asume que hay demasiada competencia entre candidatos similares en la ciudad y frena cuánto puede crecer cada uno individualmente.
+        self.FACTOR_CANIBALIZACION = 0.75
+
+        # ===============================================================
 
         self._build_geo_maps()
         self._load_affinity_data()
@@ -52,14 +74,13 @@ class ElectionProjector:
         try: return float(str(val).replace(',', ''))
         except (ValueError, TypeError): return 0.0
 
-    def _calcular_porcentajes_distorsionados(self, carpeta_limpia, df_candidatos, current_penalty):
-        """Aplica el Prior Geográfico ajustado por la penalidad iterativa."""
-
+    def _calcular_porcentajes_distorsionados(self, carpeta_limpia, df_candidatos):
+        """Aplica el Prior Geográfico utilizando los parámetros centralizados."""
         prov_data = self.afinidad_data.get("provincias_y_continentes", {}).get(carpeta_limpia, {})
         base_rurality = prov_data.get("ruralidad_score_proxy", 0.5)
 
-        # F dinámico según la penalidad actual del bucle
-        F = min(1.0, base_rurality + current_penalty)
+        # F dinámico aplicando la penalidad rural fija
+        F = min(1.0, base_rurality + self.RURAL_PENALTY)
         M = (F - 0.5) * 2
 
         candidatos_ajustados = []
@@ -73,18 +94,13 @@ class ElectionProjector:
             A_i = cand_data.get("afinidad_nacional", 0.0)
 
             ajuste = M * A_i * self.DISTORSION_MAX_PCT
-            # --- GESTIÓN ASIMÉTRICA DE ZONAS URBANAS (M < 0) ---
-            if M < 0:
-                if A_i > 0:
-                    # CASO A: Candidato Rural en Zona Urbana (Ajuste Negativo)
-                    # Amortiguador para proteger el "Voto Duro" (caída suavizada)
-                    ajuste = ajuste * 0.2
 
-                elif A_i < 0:
-                    # CASO B: Candidato Urbano en Zona Urbana (Ajuste Positivo)
-                    # Factor de Canibalización para frenar el crecimiento excesivo
-                    ajuste = ajuste * 0.50  # Retiene solo el 30% de la recompensa teórica
-            # ---------------------------------------------------
+            # --- GESTIÓN ASIMÉTRICA CON PARÁMETROS CENTRALIZADOS ---
+            if M < 0:
+                if A_i > 0: # Candidato Rural en Zona Urbana
+                    ajuste = ajuste * self.AMORTIGUADOR_VOTO_DURO
+                elif A_i < 0: # Candidato Urbano en Zona Urbana
+                    ajuste = ajuste * self.FACTOR_CANIBALIZACION
 
             pct_nuevo = max(0.0, pct_base + ajuste)
 
@@ -106,12 +122,9 @@ class ElectionProjector:
         return candidatos_ajustados
 
     def generate_projections(self):
-        print("📊 Generando matriz de proyecciones (Optimista/Pesimista x Múltiples Penalidades)...")
+        print("📊 Generando proyección unificada (Escenario Realista c/JEE)...")
 
-        # Diccionarios para agrupar proyecciones por nivel de penalidad
-        projections_opt = {p: [] for p in self.RURAL_PENALTIES}
-        projections_pes = {p: [] for p in self.RURAL_PENALTIES}
-
+        projections_final = []
         needs_imputation = []
         regional_valid_pcts = {}
 
@@ -144,8 +157,8 @@ class ElectionProjector:
             total_padron = ausentes + asistentes
             tasa_ausentismo = (ausentes / total_padron) if total_padron > 0 else 0
 
-            votantes_validos_opt = ((g_jee + g_pend) * ratio_electores_acta) * (1 - tasa_ausentismo)
-            votantes_validos_pes = ((g_pend) * ratio_electores_acta) * (1 - tasa_ausentismo)
+            # ESCENARIO ÚNICO: Se consideran las actas al JEE como recuperables
+            votantes_validos_est = ((g_jee + g_pend) * ratio_electores_acta) * (1 - tasa_ausentismo)
 
             data_base = {
                 "ubicacion": row_base['ubicacion'],
@@ -154,56 +167,40 @@ class ElectionProjector:
             }
 
             if g_contab == 0:
-                needs_imputation.append((folder_name, data_base, votantes_validos_opt, votantes_validos_pes, df))
+                needs_imputation.append((folder_name, data_base, votantes_validos_est, df))
             else:
                 region = self.prov_to_region.get(folder_name, "EXTRANJERO")
                 if region not in regional_valid_pcts: regional_valid_pcts[region] = {}
 
-                # Guardamos los votos base para imputaciones futuras (solo una vez por provincia)
+                # Guardar base para imputación
                 for _, row in df.iterrows():
                     cand = row['candidato_o_tipo']
                     pct_base = self._safe_float(row['porcentaje_valido'])
                     if cand not in regional_valid_pcts[region]: regional_valid_pcts[region][cand] = []
                     regional_valid_pcts[region][cand].append(pct_base)
 
-                # =======================================================
-                # BUCLE DE SENSIBILIDAD: Calcular para cada penalidad
-                # =======================================================
-                for penalty in self.RURAL_PENALTIES:
-                    candidatos_con_prior = self._calcular_porcentajes_distorsionados(folder_name, df, penalty)
+                candidatos_con_prior = self._calcular_porcentajes_distorsionados(folder_name, df)
 
-                    d_opt = data_base.copy()
-                    d_opt["votantes_validos_pendientes_est"] = round(votantes_validos_opt, 2)
-                    d_opt["candidatos"] = []
+                d_final = data_base.copy()
+                d_final["votantes_validos_pendientes_est"] = round(votantes_validos_est, 2)
+                d_final["candidatos"] = []
 
-                    d_pes = data_base.copy()
-                    d_pes["votantes_validos_pendientes_est"] = round(votantes_validos_pes, 2)
-                    d_pes["candidatos"] = []
+                for item in candidatos_con_prior:
+                    cand = item["cand"]
+                    pct_final = item["pct_proyectado"]
+                    d_final["candidatos"].append({
+                        "candidato_o_tipo": cand, "agrupacion": item["agrupacion"],
+                        "porcentaje_valido_base": item["pct_base"],
+                        "porcentaje_valido_usado": round(pct_final, 3),
+                        "votos_proyectados_faltantes": round(votantes_validos_est * (pct_final / 100.0), 0)
+                    })
 
-                    for item in candidatos_con_prior:
-                        cand = item["cand"]
-                        pct_final = item["pct_proyectado"]
-
-                        d_opt["candidatos"].append({
-                            "candidato_o_tipo": cand, "agrupacion": item["agrupacion"],
-                            "porcentaje_valido_base": item["pct_base"],
-                            "porcentaje_valido_usado": round(pct_final, 3),
-                            "votos_proyectados_faltantes": round(votantes_validos_opt * (pct_final / 100.0), 0)
-                        })
-                        d_pes["candidatos"].append({
-                            "candidato_o_tipo": cand, "agrupacion": item["agrupacion"],
-                            "porcentaje_valido_base": item["pct_base"],
-                            "porcentaje_valido_usado": round(pct_final, 3),
-                            "votos_proyectados_faltantes": round(votantes_validos_pes * (pct_final / 100.0), 0)
-                        })
-
-                    projections_opt[penalty].append(d_opt)
-                    projections_pes[penalty].append(d_pes)
+                projections_final.append(d_final)
 
         # =======================================================
-        # RESOLUCIÓN DE IMPUTACIONES (Zonas con 0%)
+        # RESOLUCIÓN DE IMPUTACIONES
         # =======================================================
-        for folder_name, data_base, votantes_validos_opt, votantes_validos_pes, df in needs_imputation:
+        for folder_name, data_base, votantes_validos_est, df in needs_imputation:
             region = self.prov_to_region.get(folder_name, "EXTRANJERO")
 
             temp_rows = []
@@ -220,47 +217,29 @@ class ElectionProjector:
                 })
 
             df_imputado = pd.DataFrame(temp_rows)
+            candidatos_imputados = self._calcular_porcentajes_distorsionados(folder_name, df_imputado)
 
-            for penalty in self.RURAL_PENALTIES:
-                candidatos_imputados = self._calcular_porcentajes_distorsionados(folder_name, df_imputado, penalty)
+            d_final = data_base.copy()
+            d_final["votantes_validos_pendientes_est"] = round(votantes_validos_est, 2)
+            d_final["observacion"] = f"Imputado de {region} + Prior"
+            d_final["candidatos"] = []
 
-                d_opt = data_base.copy()
-                d_opt["votantes_validos_pendientes_est"] = round(votantes_validos_opt, 2)
-                d_opt["observacion"] = f"Imputado de {region} + Prior (P={penalty})"
-                d_opt["candidatos"] = []
+            for item in candidatos_imputados:
+                pct_final = item["pct_proyectado"]
+                d_final["candidatos"].append({
+                    "candidato_o_tipo": item["cand"], "agrupacion": item["agrupacion"],
+                    "porcentaje_valido_base": round(item["pct_base"], 3),
+                    "porcentaje_valido_usado": round(pct_final, 3),
+                    "votos_proyectados_faltantes": round(votantes_validos_est * (pct_final / 100.0), 0)
+                })
 
-                d_pes = data_base.copy()
-                d_pes["votantes_validos_pendientes_est"] = round(votantes_validos_pes, 2)
-                d_pes["observacion"] = f"Imputado de {region} + Prior (P={penalty})"
-                d_pes["candidatos"] = []
-
-                for item in candidatos_imputados:
-                    pct_final = item["pct_proyectado"]
-
-                    d_opt["candidatos"].append({
-                        "candidato_o_tipo": item["cand"], "agrupacion": item["agrupacion"],
-                        "porcentaje_valido_base": round(item["pct_base"], 3),
-                        "porcentaje_valido_usado": round(pct_final, 3),
-                        "votos_proyectados_faltantes": round(votantes_validos_opt * (pct_final / 100.0), 0)
-                    })
-                    d_pes["candidatos"].append({
-                        "candidato_o_tipo": item["cand"], "agrupacion": item["agrupacion"],
-                        "porcentaje_valido_base": round(item["pct_base"], 3),
-                        "porcentaje_valido_usado": round(pct_final, 3),
-                        "votos_proyectados_faltantes": round(votantes_validos_pes * (pct_final / 100.0), 0)
-                    })
-
-                projections_opt[penalty].append(d_opt)
-                projections_pes[penalty].append(d_pes)
+            projections_final.append(d_final)
 
         # =======================================================
-        # GUARDADO DE TODOS LOS ESCENARIOS
+        # GUARDADO ÚNICO
         # =======================================================
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-        for penalty in self.RURAL_PENALTIES:
-            # Los archivos llevarán el identificador de penalidad p0.0, p0.1, etc.
-            self._flatten_and_save(projections_opt[penalty], f"proyeccion_optimista_p{penalty:.1f}", ts)
-            self._flatten_and_save(projections_pes[penalty], f"proyeccion_pesimista_p{penalty:.1f}", ts)
+        self._flatten_and_save(projections_final, "proyeccion_final", ts)
 
     def _flatten_and_save(self, projections_list, prefijo_nombre, ts):
         flat_data = []

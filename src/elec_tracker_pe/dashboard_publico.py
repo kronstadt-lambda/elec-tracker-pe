@@ -3,19 +3,18 @@ import pandas as pd
 import plotly.graph_objects as from_plotly
 import plotly.express as px
 import numpy as np
-import time
 
-# Importamos las herramientas, datos y configuraciones desde utils.py
+# Importamos las herramientas, datos y configuraciones desde utils_graphs.py
 from utils_graphs import (
     CANDIDATOS_TARGET, NOMBRES_CORTOS, EMOJIS_CANDIDATOS,
     clean_name, load_geojson, get_geo_mapping,
-    load_data, load_latest_projection
+    load_data, load_latest_projection, load_actas
 )
 
 # ---------------------------------------------------------
 # CONFIGURACIÓN Y ESTILOS
 # ---------------------------------------------------------
-st.set_page_config(page_title="ONPE Tracker Radar", layout="wide")
+st.set_page_config(page_title="ONPE Tracker Radar (Público)", layout="wide")
 
 st.markdown("""
     <style>
@@ -49,6 +48,16 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------
+# CACHÉ DE LECTURA DE DISCO (Optimización Crítica)
+# ---------------------------------------------------------
+@st.cache_data(ttl=60)
+def fetch_cached_data():
+    df = load_data()
+    df_proy = load_latest_projection()
+    df_actas = load_actas()
+    return df, df_proy, df_actas
+
+# ---------------------------------------------------------
 # MÓDULOS DE VISUALIZACIÓN
 # ---------------------------------------------------------
 def render_header(df_latest):
@@ -57,9 +66,7 @@ def render_header(df_latest):
 def render_bar_and_versus(df_latest):
     col_bar, col_vs = st.columns([1.2, 1])
 
-    df_chart = df_latest[df_latest['candidato_o_tipo'].isin(CANDIDATOS_TARGET.keys())].copy()
-
-    # Aplicamos los nombres cortos representativos
+    df_chart = df_latest[df_latest['candidato_o_tipo'].isin(CANDIDATOS_TARGET.keys())][['candidato_o_tipo', 'cantidad_votos', 'porcentaje_valido']].copy()
     df_chart['nombre_corto'] = df_chart['candidato_o_tipo'].map(NOMBRES_CORTOS)
     df_chart = df_chart.sort_values('cantidad_votos', ascending=True)
 
@@ -90,10 +97,10 @@ def render_bar_and_versus(df_latest):
         df_vs = df_chart[df_chart['candidato_o_tipo'].isin([cand1, cand2])]
 
         if len(df_vs) == 2:
-            votos1 = df_chart[df_chart['candidato_o_tipo'] == cand1]['cantidad_votos'].values[0]
-            pct1 = df_chart[df_chart['candidato_o_tipo'] == cand1]['porcentaje_valido'].values[0]
-            votos2 = df_chart[df_chart['candidato_o_tipo'] == cand2]['cantidad_votos'].values[0]
-            pct2 = df_chart[df_chart['candidato_o_tipo'] == cand2]['porcentaje_valido'].values[0]
+            votos1 = float(df_vs[df_vs['candidato_o_tipo'] == cand1]['cantidad_votos'].iloc[0])
+            pct1 = float(df_vs[df_vs['candidato_o_tipo'] == cand1]['porcentaje_valido'].iloc[0])
+            votos2 = float(df_vs[df_vs['candidato_o_tipo'] == cand2]['cantidad_votos'].iloc[0])
+            pct2 = float(df_vs[df_vs['candidato_o_tipo'] == cand2]['porcentaje_valido'].iloc[0])
 
             diff_votos = votos1 - votos2
             diff_pct = pct1 - pct2
@@ -119,7 +126,7 @@ def render_spatial_module(df_proy):
         st.info("Esperando proyecciones territoriales...")
         return
 
-    df_map = df_proy[(df_proy['candidato_o_tipo'].isin(CANDIDATOS_TARGET.keys())) & (df_proy['ubicacion'] != 'TODOS')].copy()
+    df_map = df_proy[(df_proy['candidato_o_tipo'].isin(CANDIDATOS_TARGET.keys())) & (df_proy['ubicacion'] != 'TODOS')][['ubicacion', 'candidato_o_tipo', 'votos_proyectados_faltantes']].copy()
     df_map['ubicacion_clean'] = df_map['ubicacion'].apply(clean_name)
 
     province_to_region_map, region_set, province_set, continents_set = get_geo_mapping()
@@ -128,18 +135,11 @@ def render_spatial_module(df_proy):
         st.error(f"Error: No se encontró el archivo crítico `data_stream/ubigeo_estructura.json`.")
         return
 
-    df_map['Parent_Region'] = df_map['ubicacion_clean'].map(province_to_region_map)
-    df_map['Parent_Region'] = df_map['Parent_Region'].replace({"CUZCO": "CUSCO"})
-
-    unmapped_mask = df_map['Parent_Region'].isna()
-    if unmapped_mask.any():
-        num_unmapped = unmapped_mask.sum()
-        first_five = df_map[unmapped_mask]['ubicacion_clean'].unique()[:5]
-        st.warning(f"📡 {num_unmapped} filas no pudieron mapearse a una Región (ej: {', '.join(first_five)}).")
+    df_map['Parent_Region'] = df_map['ubicacion_clean'].map(province_to_region_map).replace({"CUZCO": "CUSCO"})
 
     df_map_provincial_audit = df_map.copy()
 
-    tipo_mapa = st.radio("Alternar Vista:", ["🇵🇪 PERÚ (Regiones)", "🏙️ LIMA Y CALLAO", "🌍 EXTRANJERO"], horizontal=True)
+    tipo_mapa = st.radio("Alternar Vista:", ["🇵🇪 PERÚ (Regiones)", "🏙️ LIMA Y CALLAO", "🌍 EXTRANJERO"], horizontal=True, key="spatial_vista")
 
     sel_target = None
     df_det = pd.DataFrame()
@@ -149,7 +149,6 @@ def render_spatial_module(df_proy):
         df_peru_base = df_peru_base[~df_peru_base['ubicacion_clean'].isin(['LIMA', 'CALLAO'])]
 
         df_peru = df_peru_base.groupby(['Parent_Region', 'candidato_o_tipo'])['votos_proyectados_faltantes'].sum().reset_index()
-
         idx_winners = df_peru.groupby('Parent_Region')['votos_proyectados_faltantes'].idxmax()
         df_winners = df_peru.loc[idx_winners].copy()
         df_winners.rename(columns={'candidato_o_tipo': 'Ganador'}, inplace=True)
@@ -157,9 +156,6 @@ def render_spatial_module(df_proy):
         geojson_peru = load_geojson("regiones")
 
         if geojson_peru:
-            for feat in geojson_peru['features']:
-                feat['properties']['NOMBDEP_CLEAN'] = clean_name(feat['properties'].get('NOMBDEP', ''))
-
             fig_map = px.choropleth_mapbox(
                 df_winners, geojson=geojson_peru, locations='Parent_Region', featureidkey="properties.NOMBDEP_CLEAN",
                 color='Ganador', color_discrete_map=CANDIDATOS_TARGET,
@@ -169,47 +165,36 @@ def render_spatial_module(df_proy):
             fig_map.update_layout(margin={"r":0,"t":0,"l":0,"b":0}, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", height=500, showlegend=False)
 
             map_event = st.plotly_chart(fig_map, use_container_width=True, on_select="rerun", selection_mode="points", key="mapa_peru")
-
-            reg_list = sorted(df_peru['Parent_Region'].unique())
-            if map_event and len(map_event.selection.points) > 0:
-                sel_target = map_event.selection.points[0]["location"]
-            else:
-                sel_target = reg_list[0] if reg_list else None
+            reg_list = sorted(df_peru['Parent_Region'].dropna().unique())
+            sel_target = map_event.selection.points[0]["location"] if map_event and len(map_event.selection.points) > 0 else (reg_list[0] if reg_list else None)
 
             if sel_target:
                 df_det = df_peru[df_peru['Parent_Region'] == sel_target]
 
     elif "LIMA Y CALLAO" in tipo_mapa:
-        df_lima = df_map[df_map['ubicacion_clean'].isin(['LIMA', 'CALLAO'])]
-        df_reg = df_lima.groupby(['Parent_Region', 'candidato_o_tipo'])['votos_proyectados_faltantes'].sum().reset_index()
+        df_lima = df_map[df_map['ubicacion_clean'].isin(['LIMA', 'CALLAO'])].copy()
+        df_reg = df_lima.groupby(['ubicacion_clean', 'candidato_o_tipo'])['votos_proyectados_faltantes'].sum().reset_index()
 
-        idx_winners = df_reg.groupby('Parent_Region')['votos_proyectados_faltantes'].idxmax()
+        idx_winners = df_reg.groupby('ubicacion_clean')['votos_proyectados_faltantes'].idxmax()
         df_winners = df_reg.loc[idx_winners].copy()
         df_winners.rename(columns={'candidato_o_tipo': 'Ganador'}, inplace=True)
 
         geojson_prov = load_geojson("provincias")
         if geojson_prov:
-            for feat in geojson_prov['features']:
-                feat['properties']['NOMBPROV_CLEAN'] = clean_name(feat['properties'].get('NOMBPROV', ''))
-
             fig_map = px.choropleth_mapbox(
-                df_winners, geojson=geojson_prov, locations='Parent_Region', featureidkey="properties.NOMBPROV_CLEAN",
+                df_winners, geojson=geojson_prov, locations='ubicacion_clean', featureidkey="properties.NOMBPROV_CLEAN",
                 color='Ganador', color_discrete_map=CANDIDATOS_TARGET,
-                mapbox_style="carto-darkmatter", center={"lat": -11.9, "lon": -76.8}, zoom=7.5,
-                hover_name='Parent_Region'
+                mapbox_style="carto-darkmatter", center={"lat": -12.05, "lon": -77.05}, zoom=8.5,
+                hover_name='ubicacion_clean'
             )
             fig_map.update_layout(margin={"r":0,"t":0,"l":0,"b":0}, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", height=500, showlegend=False)
 
             map_event = st.plotly_chart(fig_map, use_container_width=True, on_select="rerun", selection_mode="points", key="mapa_lima")
-
-            reg_list = sorted(df_reg['Parent_Region'].unique())
-            if map_event and len(map_event.selection.points) > 0:
-                sel_target = map_event.selection.points[0]["location"]
-            else:
-                sel_target = reg_list[0] if reg_list else None
+            reg_list = sorted(df_reg['ubicacion_clean'].unique())
+            sel_target = map_event.selection.points[0]["location"] if map_event and len(map_event.selection.points) > 0 else (reg_list[0] if reg_list else None)
 
             if sel_target:
-                df_det = df_reg[df_reg['Parent_Region'] == sel_target]
+                df_det = df_reg[df_reg['ubicacion_clean'] == sel_target]
 
     else:
         df_ext = df_map[df_map['Parent_Region'].isin(continents_set)].copy()
@@ -233,13 +218,8 @@ def render_spatial_module(df_proy):
         fig_map.update_layout(margin={"r":0,"t":0,"l":0,"b":0}, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", height=500, showlegend=False)
 
         map_event = st.plotly_chart(fig_map, use_container_width=True, on_select="rerun", selection_mode="points", key="mapa_extranjero")
-
         reg_list = sorted(df_reg['Parent_Region'].unique())
-        if map_event and len(map_event.selection.points) > 0:
-            pt = map_event.selection.points[0]
-            sel_target = pt.get("customdata", [pt.get("text", reg_list[0])])[0]
-        else:
-            sel_target = reg_list[0] if reg_list else None
+        sel_target = map_event.selection.points[0]["location"] if map_event and len(map_event.selection.points) > 0 else (reg_list[0] if len(reg_list) > 0 else None)
 
         if sel_target:
             df_det = df_reg[df_reg['Parent_Region'] == sel_target]
@@ -254,7 +234,7 @@ def render_spatial_module(df_proy):
         st.markdown(f"""
         <div class="winner-box" style="background-color: #e2d3ba; border: 2px solid #a89984; color: #000000;">
             <h3 style="margin:0; color: #000000 !important; font-weight:bold;">
-                📍 ZONA AGREGADA (DEPARTAMENTO/CONTINENTE): {sel_target} | LÍDER: {nombre_ganador_corto.upper()}
+                📍 ZONA AGREGADA: {sel_target} | LÍDER: {nombre_ganador_corto.upper()}
             </h3>
             <h4 style="margin:0; color: #000000 !important;">
                 👥 Votantes Faltantes Proyectados (Total): {total_votos_region:,.0f} votos
@@ -300,7 +280,6 @@ def render_spatial_module(df_proy):
                 pivot_provs = pivot_provs[cols]
 
                 pivot_provs.rename(columns=NOMBRES_CORTOS, inplace=True)
-
                 pivot_provs['TOTAL PROVINCIA'] = pivot_provs.sum(axis=1)
                 pivot_provs = pivot_provs.sort_values('TOTAL PROVINCIA', ascending=False)
                 pivot_provs.rename_axis('Provincia', inplace=True)
@@ -315,7 +294,6 @@ def render_projections_and_layout(df_filtrado, min_x, dict_proy_abs, dict_proy_p
     fig_abs = from_plotly.Figure()
 
     ultimo_corte_x = 0
-    max_y_pct = 0
 
     cand_last_vals = []
     for cand in CANDIDATOS_TARGET.keys():
@@ -341,9 +319,7 @@ def render_projections_and_layout(df_filtrado, min_x, dict_proy_abs, dict_proy_p
         y_abs = df_cand['cantidad_votos'].values
 
         nombre_corto = NOMBRES_CORTOS.get(candidato, candidato)
-
-        ultimo_corte_x = max(ultimo_corte_x, x_data[-1])
-        max_y_pct = max(max_y_pct, max(y_pct))
+        ultimo_corte_x = max(ultimo_corte_x, x_data[-1] if len(x_data) > 0 else 0)
 
         fig_pct.add_trace(from_plotly.Scatter(x=x_data, y=y_pct, mode='lines+markers', name=nombre_corto, line=dict(color=color, width=3), connectgaps=True))
         fig_abs.add_trace(from_plotly.Scatter(x=x_data, y=y_abs, mode='lines+markers', name=nombre_corto, line=dict(color=color, width=3), connectgaps=True))
@@ -575,23 +551,175 @@ def render_bottom_totals(df_proy):
 
     st.plotly_chart(fig2, use_container_width=True)
 
+def render_legal_strategy_map(df_proy, df_actas):
+    st.markdown("---")
+    st.markdown("### ⚖️ Mapa de Estrategia Legal y Defensa del Voto")
+    st.markdown("Identifica las zonas de batalla legal (Actas JEE/Pendientes) coloreadas por el candidato que lidera la **base de votación validada**, ideal para asignar recursos y priorizar impugnaciones.")
+
+    if df_proy.empty or df_actas.empty:
+        st.info("Esperando datos de proyecciones y actas JEE...")
+        return
+
+    cand1 = "RAFAEL BERNARDO LÓPEZ ALIAGA CAZORLA"
+    cand2 = "ROBERTO HELBERT SANCHEZ PALOMINO"
+
+    df_disputa = df_proy[df_proy['candidato_o_tipo'].isin([cand1, cand2])].copy()
+    df_disputa['ubicacion_clean'] = df_disputa['ubicacion'].apply(clean_name)
+
+    idx_lider = df_disputa.groupby('ubicacion_clean')['porcentaje_valido_base'].idxmax()
+    df_lideres = df_disputa.loc[idx_lider][['ubicacion_clean', 'candidato_o_tipo']]
+    df_lideres = df_lideres.rename(columns={'candidato_o_tipo': 'Lider_Base'})
+
+    df_actas['ubicacion_clean'] = df_actas['ubicacion_clean'].apply(clean_name)
+    df_mapa = pd.merge(df_actas, df_lideres, on='ubicacion_clean', how='left')
+
+    col_ctrl1, col_ctrl2 = st.columns(2)
+    with col_ctrl1:
+        metrica_sel = st.radio("Foco Legal a Visualizar:", ["⚖️ Actas en JEE (Impugnadas)", "🕒 Actas Pendientes (Por Procesar)"], horizontal=True)
+    with col_ctrl2:
+        vista_sel = st.radio("Escenario Geográfico:", ["🇵🇪 PERÚ (Provincias)", "🏙️ LIMA Y CALLAO", "🌍 EXTRANJERO"], horizontal=True, key="legal_vista")
+
+    col_metrica = 'actas_jee' if 'JEE' in metrica_sel else 'actas_pendientes'
+
+    df_mapa['Lider_Corto'] = df_mapa['Lider_Base'].map(NOMBRES_CORTOS).fillna('Sin Datos')
+    cand1_corto = NOMBRES_CORTOS[cand1]
+    cand2_corto = NOMBRES_CORTOS[cand2]
+
+    df_mapa['Estrategia'] = df_mapa.apply(
+        lambda r: r['Lider_Corto'] if r[col_metrica] > 0 else 'Sin Actas en Disputa', axis=1
+    )
+
+    color_map = {
+        cand1_corto: CANDIDATOS_TARGET[cand1],
+        cand2_corto: CANDIDATOS_TARGET[cand2],
+        'Sin Actas en Disputa': '#ffffff'
+    }
+
+    province_to_region_map, region_set, province_set, continents_set = get_geo_mapping()
+    df_mapa['Parent_Region'] = df_mapa['ubicacion_clean'].map(province_to_region_map).replace({"CUZCO": "CUSCO"})
+
+    # Inicializamos la variable de la figura del mapa para asegurarnos de que exista
+    fig_map = None
+
+    if "PERÚ" in vista_sel:
+        df_plot = df_mapa[~df_mapa['ubicacion_clean'].isin(['LIMA', 'CALLAO']) & ~df_mapa['Parent_Region'].isin(continents_set)].copy()
+        geojson_prov = load_geojson("provincias")
+
+        if geojson_prov:
+            fig_map = px.choropleth_mapbox(
+                df_plot, geojson=geojson_prov, locations='ubicacion_clean', featureidkey="properties.NOMBPROV_CLEAN",
+                color='Estrategia', color_discrete_map=color_map,
+                mapbox_style="carto-darkmatter", center={"lat": -9.18, "lon": -75.01}, zoom=4.5,
+                hover_name='ubicacion_clean', hover_data={col_metrica: True, 'Estrategia': False, 'ubicacion_clean': False}
+            )
+            fig_map.update_layout(margin={"r":0,"t":0,"l":0,"b":0}, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", height=550)
+
+    elif "LIMA" in vista_sel:
+        df_plot = df_mapa[df_mapa['ubicacion_clean'].isin(['LIMA', 'CALLAO'])].copy()
+        geojson_prov = load_geojson("provincias")
+
+        if geojson_prov:
+            fig_map = px.choropleth_mapbox(
+                df_plot, geojson=geojson_prov, locations='ubicacion_clean', featureidkey="properties.NOMBPROV_CLEAN",
+                color='Estrategia', color_discrete_map=color_map,
+                mapbox_style="carto-darkmatter", center={"lat": -12.05, "lon": -77.05}, zoom=8.5,
+                hover_name='ubicacion_clean', hover_data={col_metrica: True, 'Estrategia': False, 'ubicacion_clean': False}
+            )
+            fig_map.update_layout(margin={"r":0,"t":0,"l":0,"b":0}, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", height=550)
+
+    else:
+        df_plot = df_mapa[df_mapa['Parent_Region'].isin(continents_set)].copy()
+        coords = {"AFRICA": (0, 20), "AMERICA": (15, -85), "ASIA": (40, 100), "EUROPA": (50, 15), "OCEANIA": (-25, 135)}
+        df_plot['lat'] = df_plot['ubicacion_clean'].map(lambda x: coords.get(x, (0,0))[0])
+        df_plot['lon'] = df_plot['ubicacion_clean'].map(lambda x: coords.get(x, (0,0))[1])
+
+        df_plot['Bubble_Size'] = df_plot[col_metrica].apply(lambda x: x if x > 0 else 1)
+
+        fig_map = px.scatter_geo(
+            df_plot, lat='lat', lon='lon', color='Estrategia',
+            color_discrete_map=color_map, size='Bubble_Size',
+            size_max=40, text='ubicacion_clean', projection="natural earth",
+            hover_name='ubicacion_clean', hover_data={col_metrica: True, 'Estrategia': False, 'lat': False, 'lon': False, 'Bubble_Size': False}
+        )
+        fig_map.update_geos(showcoastlines=True, coastlinecolor="#504945", showland=True, landcolor="#3c3836", showocean=True, oceancolor="#282828", bgcolor="rgba(0,0,0,0)")
+        fig_map.update_layout(margin={"r":0,"t":0,"l":0,"b":0}, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", height=550)
+
+    # ---------------------------------------------------------
+    # RENDERIZADO DEL MAPA Y GRÁFICOS DE BARRAS EN COLUMNAS
+    # ---------------------------------------------------------
+    if fig_map is not None:
+        col_map, col_bars = st.columns([1.2, 1])
+
+        with col_map:
+            st.plotly_chart(fig_map, use_container_width=True)
+
+        with col_bars:
+            st.markdown(f"#### 📊 Balance de Actas en el mapa seleccionado")
+
+            # Resumen de datos usando la vista actual (df_plot)
+            df_summary_raw = df_plot[df_plot['Lider_Corto'].isin([cand1_corto, cand2_corto])].groupby('Lider_Corto')[['actas_jee', 'actas_pendientes']].sum().reset_index()
+
+            # Aseguramos que ambos candidatos existan en el DataFrame para que se rendericen incluso si tienen 0 actas
+            res = []
+            for c in [cand1_corto, cand2_corto]:
+                row = df_summary_raw[df_summary_raw['Lider_Corto'] == c]
+                if not row.empty:
+                    res.append({'Lider_Corto': c, 'actas_jee': row['actas_jee'].values[0], 'actas_pendientes': row['actas_pendientes'].values[0]})
+                else:
+                    res.append({'Lider_Corto': c, 'actas_jee': 0, 'actas_pendientes': 0})
+
+            df_summary = pd.DataFrame(res)
+
+            # Gráfica 1: Actas en JEE
+            df_jee_sorted = df_summary.sort_values('actas_jee', ascending=True)
+            fig_jee = px.bar(
+                df_jee_sorted, x='actas_jee', y='Lider_Corto', color='Lider_Corto',
+                orientation='h', text_auto='.0f', color_discrete_map=color_map,
+                title="⚖️ Actas en JEE (Impugnadas)"
+            )
+            fig_jee.update_layout(
+                xaxis=dict(title="Total Actas", gridcolor="#504945"), yaxis=dict(title=""),
+                showlegend=False, height=200, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                font=dict(family="VT323", size=16, color="#ebdbb2"), margin=dict(t=40, b=0, l=0, r=0)
+            )
+            fig_jee.update_traces(textposition='outside', textfont=dict(color="#ebdbb2"))
+            st.plotly_chart(fig_jee, use_container_width=True)
+
+            st.markdown("<br>", unsafe_allow_html=True) # Espaciado
+
+            # Gráfica 2: Actas Pendientes
+            df_pend_sorted = df_summary.sort_values('actas_pendientes', ascending=True)
+            fig_pend = px.bar(
+                df_pend_sorted, x='actas_pendientes', y='Lider_Corto', color='Lider_Corto',
+                orientation='h', text_auto='.0f', color_discrete_map=color_map,
+                title="🕒 Actas Pendientes (Por Procesar)"
+            )
+            fig_pend.update_layout(
+                xaxis=dict(title="Total Actas", gridcolor="#504945"), yaxis=dict(title=""),
+                showlegend=False, height=200, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                font=dict(family="VT323", size=16, color="#ebdbb2"), margin=dict(t=40, b=0, l=0, r=0)
+            )
+            fig_pend.update_traces(textposition='outside', textfont=dict(color="#ebdbb2"))
+            st.plotly_chart(fig_pend, use_container_width=True)
+
 
 # ---------------------------------------------------------
-# ORQUESTADOR PRINCIPAL
+# ORQUESTADOR PRINCIPAL (ENVUELTO EN FRAGMENTO DE RECARGA AUTOMÁTICA)
 # ---------------------------------------------------------
-df = load_data()
+@st.fragment(run_every=60)
+def auto_refresh_dashboard():
+    df, df_proy, df_actas = fetch_cached_data()
 
-if df.empty:
-    st.warning("📡 Esperando datos consolidados en data_stream/onpe_todos_latest.csv...")
-else:
+    if df.empty:
+        st.warning("📡 Esperando datos consolidados en data_stream/onpe_todos_latest.csv...")
+        return
+
     ultima_fecha = df['actualizado_dt'].max()
     df_latest = df[df['actualizado_dt'] == ultima_fecha]
     df_filtrado = df[df['candidato_o_tipo'].isin(CANDIDATOS_TARGET.keys())]
 
     render_header(df_latest)
     render_bar_and_versus(df_latest)
-
-    df_proy = load_latest_projection()
 
     proy_100_abs = {}
     proy_100_pct = {}
@@ -619,5 +747,8 @@ else:
     render_projections_and_layout(df_filtrado, df_filtrado['actas_contabilizadas_pct'].min(), proy_100_abs, proy_100_pct, df_proy)
     render_bottom_totals(df_proy)
 
-time.sleep(60)
-st.rerun()
+    # Invocación de la nueva vista táctica
+    render_legal_strategy_map(df_proy, df_actas)
+
+# Llamada principal a la aplicación
+auto_refresh_dashboard()

@@ -1,0 +1,257 @@
+{
+  "PERU": {
+    "AMAZONAS": [
+      "BAGUA",
+      "BONGARÁ",
+      "CHACHAPOYAS",
+      "CONDORCANQUI",
+      "LUYA",
+      "RODRÍGUEZ DE MENDOZA",
+      "UTCUBAMBA"
+    ],
+    "ÁNCASH": [
+      "AIJA",
+      "ANTONIO RAIMONDI",
+      "ASUNCIÓN",
+      "BOLOGNESI",
+      "CARHUAZ",
+      "CARLOS FERMÍN FITZCARRALD",
+      "CASMA",
+      "CORONGO",
+      "HUARAZ",
+      "HUARI",
+      "HUARMEY",
+      "HUAYLAS",
+      "MARISCAL LUZURIAGA",
+      "OCROS",
+      "PALLASCA",
+      "POMABAMBA",
+      "RECUAY",
+      "SANTA",
+      "SIHUAS",
+      "YUNGAY"
+    ],
+    "APURÍMAC": [
+      "ABANCAY",
+      "ANDAHUAYLAS",
+      "ANTABAMBA",
+      "AYMARAES",
+      "CHINCHEROS",
+      "COTABAMBAS",
+      "GRAU"
+    ],
+    "AREQUIPA": [
+      "AREQUIPA",
+      "CAMANÁ",
+      "CARAVELÍ",
+      "CASTILLA",
+      "CAYLLOMA",
+      "CONDESUYOS",
+      "ISLAY",
+      "LA UNIÓN"
+    ],
+    "AYACUCHO": [
+      "CANGALLO",
+      "HUAMANGA",
+      "HUANCA SANCOS",
+      "HUANTA",
+      "LA MAR",
+      "LUCANAS",
+      "PARINACOCHAS",
+      "PÁUCAR DEL SARA SARA",
+      "SUCRE",
+      "VÍCTOR FAJARDO",
+      "VILCAS HUAMÁN"
+    ],
+    "CAJAMARCA": [
+      "CAJABAMBA",
+      "CAJAMARCA",
+      "CELENDÍN",
+      "CHOTA",
+      "CONTUMAZA",
+      "CUTERVO",
+      "HUALGAYOC",
+      "JAÉN",
+      "SAN IGNACIO",
+      "SAN MARCOS",
+      "SAN MIGUEL",
+      "SAN PABLO",
+      "SANTA CRUZ"
+    ],
+    "CALLAO": [
+      "CALLAO"
+    ],
+    "CUSCO": [
+      "ACOMAYO",
+      "ANTA",
+      "CALCA",
+      "CANAS",
+      "CANCHIS",
+      "CHUMBIVILCAS",
+      "CUSCO",
+      "ESPINAR",
+      "LA CONVENCIÓN",
+      "PARURO",
+      "PAUCARTAMBO",
+      "QUISPICANCHI",
+      "URUBAMBA"
+    ],
+    "HUANCAVELICA": [
+      "ACOBAMBA",
+      "ANGARAES",
+      "CASTROVIRREYNA",
+      "CHURCAMPA",
+      "HUANCAVELICA",
+      "HUAYTARA",
+      "TAYACAJA"
+    ],
+    "HUÁNUCO": [
+      "AMBO",
+      "DOS DE MAYO",
+      "HUACAYBAMBA",
+      "HUAMALIES",
+      "HUÁNUCO",
+      "LAURICOCHA",
+      "LEONCIO PRADO",
+      "MARAÑÓN",
+      "PACHITEA",
+      "PUERTO INCA",
+      "YAROWILCA"
+    ],
+    "ICA": [
+      "CHINCHA",
+      "ICA",
+      "NASCA",
+      "PALPA",
+      "PISCO"
+    ],
+    "JUNÍN": [
+      "CHANCHAMAYO",
+      "CHUPACA",
+      "CONCEPCIÓN",
+      "HUANCAYO",
+      "JAUJA",
+      "JUNÍN",
+      "SATIPO",
+      "TARMA",
+      "YAULI"
+    ],
+    "LA LIBERTAD": [
+      "ASCOPE",
+      "BOLÍVAR",
+      "CHEPÉN",
+      "GRAN CHIMÚ",
+      "JULCÁN",
+      "OTUZCO",
+      "PACASMAYO",
+      "PATAZ",
+      "SÁNCHEZ CARRIÓN",
+      "SANTIAGO DE CHUCO",
+      "TRUJILLO",
+      "VIRÚ"
+    ],
+    "LAMBAYEQUE": [
+      "CHICLAYO",
+      "FERREÑAFE",
+      "LAMBAYEQUE"
+    ],
+    "LIMA": [
+      "BARRANCA",
+      "CAJATAMBO",
+      "CANTA",
+      "CAÑETE",
+      "HUARAL",
+      "HUAROCHIRÍ",
+      "HUAURA",
+      "LIMA",
+      "OYÓN",
+      "YAUYOS"
+    ],
+    "LORETO": [
+      "ALTO AMAZONAS",
+      "DATEM DEL MARAÑÓN",
+      "LORETO",
+      "MARISCAL RAMÓN CASTILLA",
+      "MAYNAS",
+      "PUTUMAYO",
+      "REQUENA",
+      "UCAYALI"
+    ],
+    "MADRE DE DIOS": [
+      "MANÚ",
+      "TAHUAMANÚ",
+      "TAMBOPATA"
+    ],
+    "MOQUEGUA": [
+      "GENERAL SÁNCHEZ CERRO",
+      "ILO",
+      "MARISCAL NIETO"
+    ],
+    "PASCO": [
+      "DANIEL ALCIDES CARRIÓN",
+      "OXAPAMPA",
+      "PASCO"
+    ],
+    "PIURA": [
+      "AYABACA",
+      "HUANCABAMBA",
+      "MORROPÓN",
+      "PAITA",
+      "PIURA",
+      "SECHURA",
+      "SULLANA",
+      "TALARA"
+    ],
+    "PUNO": [
+      "AZÁNGARO",
+      "CARABAYA",
+      "CHUCUITO",
+      "EL COLLAO",
+      "HUANCANÉ",
+      "LAMPA",
+      "MELGAR",
+      "MOHO",
+      "PUNO",
+      "SAN ANTONIO DE PUTINA",
+      "SANDIA",
+      "SAN ROMÁN",
+      "YUNGUYO"
+    ],
+    "SAN MARTÍN": [
+      "BELLAVISTA",
+      "EL DORADO",
+      "HUALLAGA",
+      "LAMAS",
+      "MARISCAL CÁCERES",
+      "MOYOBAMBA",
+      "PICOTA",
+      "RIOJA",
+      "SAN MARTÍN",
+      "TOCACHE"
+    ],
+    "TACNA": [
+      "CANDARAVE",
+      "JORGE BASADRE",
+      "TACNA",
+      "TARATA"
+    ],
+    "TUMBES": [
+      "CONTRALMIRANTE VILLAR",
+      "TUMBES",
+      "ZARUMILLA"
+    ],
+    "UCAYALI": [
+      "ATALAYA",
+      "CORONEL PORTILLO",
+      "PADRE ABAD",
+      "PURÚS"
+    ]
+  },
+  "EXTRANJERO": [
+    "ÁFRICA",
+    "AMÉRICA",
+    "ASIA",
+    "EUROPA",
+    "OCEANÍA"
+  ]
+}
