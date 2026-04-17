@@ -1,0 +1,43 @@
+# Diccionario de Hiperparámetros del Modelo PEA (Proyección Espacial Asimétrica)
+
+Este documento define los parámetros centrales que controlan la sensibilidad, el sesgo y la volatilidad del algoritmo de proyección electoral. Estos valores ajustan cómo el modelo distribuye el "Bolsón de Votos Faltantes" (actas pendientes y observadas) basándose en priors geográficos y sociodemográficos.
+
+-------------------------------------------------------------------------------
+
+### 1. RURAL_PENALTY (Penalidad de Profundidad Rural)
+Valor actual: 0.05
+
+* Concepto: Representa la presunción estadística de que las actas que tardan más en llegar a los centros de cómputo (o que son observadas con mayor frecuencia) provienen de zonas geográficamente más profundas, aisladas o de difícil acceso dentro de una misma provincia. Este parámetro empuja matemáticamente la afinidad de la zona restante hacia el extremo "rural", favoreciendo a los candidatos con ese perfil y restando inercia a los candidatos netamente urbanos.
+* Rango de Impacto:
+  - Hacia el Límite Inferior (0.00): Proyección Lineal / Neutral. El modelo asume que el remanente de actas es demográficamente idéntico a las actas ya contabilizadas. Se elimina el factor de aislamiento geográfico.
+  - Hacia el Límite Superior (ej. 0.20 - 0.30): Sesgo Profundo Extremo. El modelo asume que todo lo que falta por contar viene del "Perú profundo". Los candidatos urbanos se desplomarán en las proyecciones de actas faltantes, mientras que los candidatos de corte rural recibirán un impulso masivo e irrealista.
+
+-------------------------------------------------------------------------------
+
+### 2. DISTORSION_MAX_PCT (Límite de Distorsión Máxima)
+Valor actual: 2.0
+
+* Concepto: Actúa como la "sensibilidad general" o el control de volumen del algoritmo. Define el tope máximo (en puntos porcentuales) que el modelo tiene permitido alterar el porcentaje base actual de un candidato basándose en su afinidad geográfica. Es la barrera de seguridad que evita que la proyección difiera de forma desproporcionada de la realidad empírica (la data dura que ya reporta la ONPE).
+* Rango de Impacto:
+  - Hacia el Límite Inferior (ej. 1.0 - 2.0): Modelo Conservador. Las proyecciones se volverán muy rígidas y se pegarán fuertemente al % actual de la ONPE. La distorsión geográfica apenas moverá las agujas, ignorando posibles bolsones de votos ocultos.
+  - Hacia el Límite Superior (ej. 15.0 - 20.0): Modelo Volátil / Valiente. Otorga demasiada libertad al prior matemático. Pequeñas diferencias de afinidad causarán que los candidatos salten o caigan drásticamente en los resultados proyectados finales, generando inestabilidad entre corte y corte.
+
+-------------------------------------------------------------------------------
+
+### 3. AMORTIGUADOR_VOTO_DURO (Protección de Fidelidad)
+Valor actual: 0.6
+
+* Concepto: Gestiona el comportamiento asimétrico de un Candidato Rural proyectado en una Zona Urbana. Sociodemográficamente, asume el fenómeno de la migración: los votantes de origen provincial que residen en ciudades suelen conservar una afinidad identitaria fuerte (voto duro). Este amortiguador frena la caída del candidato rural en entornos adversos, asumiendo que no bajará de cierto núcleo sólido.
+* Rango de Impacto:
+  - Hacia el Límite Inferior (ej. 0.1): Protección Absoluta. El modelo vuelve al candidato rural prácticamente inmune a la demografía urbana. Asume que retendrá casi todos sus votos sin importar cuán adversa sea la zona restante por escrapear.
+  - Hacia el Límite Superior (ej. 0.8 - 1.0): Sin Protección. El modelo castigará severamente al candidato rural en las ciudades, haciéndole perder porcentaje muy rápidamente frente a sus rivales locales en las zonas urbanas.
+
+-------------------------------------------------------------------------------
+
+### 4. FACTOR_CANIBALIZACION (Fragmentación Competitiva)
+Valor actual: 0.85
+
+* Concepto: Gestiona el comportamiento asimétrico de un Candidato Urbano proyectado en una Zona Urbana. En ciudades grandes, la oferta de candidatos urbanos es mayor, por lo que el "bonus" de votos disponibles se fragmenta. Este factor actúa como un techo de cristal que frena el crecimiento matemático de un candidato urbano en su propia plaza, simulando la alta rivalidad por el mismo perfil de elector.
+* Rango de Impacto:
+  - Hacia el Límite Inferior (ej. 0.2 - 0.3): Crecimiento Restringido. Asume un escenario de altísima competencia (muchos candidatos similares canibalizándose). Impide que un solo candidato urbano capture la gran mayoría de los votos proyectados en las ciudades.
+  - Hacia el Límite Superior (ej. 0.9 - 1.0): Crecimiento Libre (Efecto Arrastre). Asume que el candidato urbano es un líder hegemónico en la ciudad. Capturará casi el 100% de la bonificación demográfica disponible, disparando sus números finales de forma acelerada.

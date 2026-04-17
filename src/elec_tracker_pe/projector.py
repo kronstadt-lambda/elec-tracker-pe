@@ -19,10 +19,10 @@ class ElectionProjector:
         # ===============================================================
         # PARÁMETROS DE SESGO Y DISTORSIÓN (AJUSTABLES CENTRALIZADOS)
         # ===============================================================
-        self.RURAL_PENALTY = 0.1
-        self.DISTORSION_MAX_PCT = 5.0
-        self.AMORTIGUADOR_VOTO_DURO = 0.4
-        self.FACTOR_CANIBALIZACION = 0.75
+        self.RURAL_PENALTY = 0.05
+        self.DISTORSION_MAX_PCT = 2.0
+        self.AMORTIGUADOR_VOTO_DURO = 0.6
+        self.FACTOR_CANIBALIZACION = 0.85
         # ===============================================================
 
         self._build_geo_maps()
