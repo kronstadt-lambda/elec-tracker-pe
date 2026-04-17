@@ -52,6 +52,14 @@ st.markdown("""
         margin-bottom: 25px;
         border-radius: 4px;
     }
+    .error-box {
+        background-color: #cc241d20;
+        border-left: 5px solid #cc241d;
+        padding: 15px;
+        margin-top: 20px;
+        margin-bottom: 5px;
+        border-radius: 4px;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -126,6 +134,20 @@ def render_bar_and_versus(df_latest):
             """, unsafe_allow_html=True)
         else:
             st.info("Esperando datos de ambos candidatos para la comparación.")
+
+def render_onpe_maintenance_warning():
+    st.markdown("""
+    <div class="error-box">
+        <h3 style="margin-top:0; color: #fb4934 !important;">🚨 AVISO CRÍTICO: DISCREPANCIAS EN LA FUENTE OFICIAL (ONPE)</h3>
+        <p style="font-family: 'Arial', sans-serif; font-size: 1rem; color: #ebdbb2;">
+            Se han detectado incongruencias y datos erráticos provenientes directamente de los servidores públicos de la ONPE. Estas anomalías alteran e introducen un margen de error externo a nuestra proyección de datos.
+        </p>
+        <p style="font-family: 'Arial', sans-serif; font-size: 1rem; color: #ebdbb2;">
+            La ONPE ha confirmado oficialmente que su sistema se encuentra bajo <strong>mantenimiento</strong>. Recomendamos tomar las variaciones bruscas con cautela hasta que se estabilice el flujo oficial de actas.<br><br>
+            🔗 <a href="https://x.com/ONPE_oficial/status/2045181850826482127" target="_blank" style="color: #fe8019; font-weight: bold; text-decoration: underline;">Ver confirmación oficial de la ONPE en X (Twitter)</a>
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
 
 def render_projection_warning():
     st.markdown("""
@@ -827,6 +849,10 @@ def auto_refresh_dashboard():
 
     render_header(df_latest)
     render_bar_and_versus(df_latest)
+
+    # NUEVA ADVERTENCIA INSERTADA AQUÍ
+    render_onpe_maintenance_warning()
+
     render_projection_warning()
 
     proy_100_abs = {}
