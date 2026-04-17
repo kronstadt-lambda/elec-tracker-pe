@@ -56,7 +56,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# CACHÉ DE LECTURA DE DISCO (Optimización Crítica)
+# CACHÉ DE LECTURA DE DISCO
 # ---------------------------------------------------------
 @st.cache_data(ttl=60)
 def fetch_cached_data():
@@ -130,15 +130,17 @@ def render_bar_and_versus(df_latest):
 def render_projection_warning():
     st.markdown("""
     <div class="warning-box">
-        <h3 style="margin-top:0; color: #d79921 !important;">⚠️ ZONA DE PROYECCIÓN ESTADÍSTICA</h3>
+        <h3 style="margin-top:0; color: #d79921 !important;">⚠️ ZONA DE PROYECCIÓN ESTADÍSTICA EN DOS FASES</h3>
         <p style="font-family: 'Arial', sans-serif; font-size: 1rem; color: #ebdbb2;">
-            A partir de este punto, los gráficos y mapas <strong>NO representan resultados oficiales consolidados</strong>. Muestran estimaciones matemáticas generadas por el <b>Modelo de Proyección Espacial Asimétrica (PEA)</b>, el cual integra proactivamente tanto las actas pendientes de procesamiento como aquellas observadas y enviadas al <b>JEE</b>. Se asume que, bajo el comportamiento histórico de estas instancias electorales, las observaciones suelen ser desestimadas en su casi totalidad, por lo que se consideran íntegramente dentro del conteo final proyectado al 100%.<br><br>
+            A partir de este punto, los gráficos y mapas <strong>NO representan resultados oficiales consolidados</strong>. Muestran estimaciones matemáticas generadas por el <b>Modelo de Proyección Espacial Asimétrica (PEA)</b>, separando la trayectoria futura en dos hitos clave:<br><br>
+            <strong>1. Punto Intermedio (■):</strong> Proyecta el resultado incluyendo EXCLUSIVAMENTE las <b>Actas Pendientes</b> de procesamiento normal en los centros de cómputo. Marca el hito donde la ONPE pausará el avance regular.<br>
+            <strong>2. Punto Final 100% (★):</strong> Proyecta el resultado final sumando la hipotética recuperación total de las <b>Actas Observadas (JEE)</b>. Se asume que, bajo el comportamiento histórico, las observaciones suelen ser desestimadas en su casi totalidad, por lo que se consideran íntegramente dentro del conteo final proyectado al 100%.<br><br>
             <strong>Escenario Estructural:</strong> Esta proyección aplica factores de corrección que compensan el procesamiento tardío de actas. Por diseño, este escenario asume condiciones que <b>favorecen estadísticamente a un candidato de perfil rural frente a uno urbano</b>, ajustando el peso de los votos faltantes según la profundidad geográfica de las provincias por procesar.<br><br>
             <a href="#metodologia-de-proyeccion" style="color: #fe8019; font-weight: bold; text-decoration: underline;">[ Leer Metodología Técnica Detallada ↓ ]</a>
         </p>
         <hr style="border-color: #504945; margin: 10px 0;">
         <p style="font-family: 'Arial', sans-serif; font-size: 0.85rem; color: #a89984; margin-bottom: 0;">
-            <em><b>Aviso Legal y de Fuente:</b> Esta metodología utiliza como insumo exclusivo los datos crudos extraídos mediante scraping directo de la plataforma pública de la ONPE en tiempo real. Cualquier recategorización oficial de actas, modificacion de datos, anulación de mesas por el JEE o caída temporal del sistema oficial alterará la base de datos e impactará automáticamente en la sensibilidad y resultados de esta proyección.</em>
+            <em><b>Aviso Legal y de Fuente:</b> Esta metodología utiliza como insumo exclusivo los datos crudos extraídos mediante scraping directo de la plataforma pública de la ONPE en tiempo real. Cualquier recategorización oficial de actas, modificación de datos, anulación de mesas por el JEE o caída temporal del sistema oficial alterará la base de datos e impactará automáticamente en la sensibilidad y resultados de esta proyección.</em>
         </p>
     </div>
     """, unsafe_allow_html=True)
@@ -316,7 +318,7 @@ def render_spatial_module(df_proy):
 
                 st.dataframe(pivot_provs, use_container_width=True)
 
-def render_projections_and_layout(df_filtrado, min_x, dict_proy_abs, dict_proy_pct, df_proy, margin_of_error):
+def render_projections_and_layout(df_filtrado, dict_proy_abs, dict_proy_pct, dict_proy_pend_abs, dict_proy_pend_pct, x_intermedio, df_proy, margin_of_error_100, margin_of_error_pend):
     fig_pct = from_plotly.Figure()
     fig_abs = from_plotly.Figure()
 
@@ -336,6 +338,16 @@ def render_projections_and_layout(df_filtrado, min_x, dict_proy_abs, dict_proy_p
 
     for fig in [fig_pct, fig_abs]:
         fig.add_vline(x=100, line_width=2, line_dash="dash", line_color="#a89984", opacity=0.8)
+        # Línea vertical para el punto intermedio (Procesamiento normal sin JEE)
+        if x_intermedio < 100:
+            fig.add_vline(x=x_intermedio, line_width=1.5, line_dash="dot", line_color="#83a598", opacity=0.8)
+            fig.add_annotation(
+                x=x_intermedio, y=0.01, yref="paper",
+                text=f"<b>Fin Procesamiento<br>Normal - ONPE ({x_intermedio:.2f}%)</b>",
+                showarrow=False, xanchor="right" if x_intermedio > 95 else "left", xshift=-5 if x_intermedio > 95 else 5,
+                font=dict(size=12, color="#83a598"),
+                bgcolor="rgba(40,40,40,0.8)"
+            )
 
     for i, candidato in enumerate(sorted_cands):
         color = CANDIDATOS_TARGET[candidato]
@@ -356,11 +368,16 @@ def render_projections_and_layout(df_filtrado, min_x, dict_proy_abs, dict_proy_p
             last_y_pct = y_pct[-1]
             last_y_abs = y_abs[-1]
 
+            # Valores 100% (Final)
             p_pct = dict_proy_pct[candidato]
             p_abs = dict_proy_abs[candidato]
 
-            moe_pct = margin_of_error.get(candidato, {}).get('pct', 0.0)
-            moe_abs = margin_of_error.get(candidato, {}).get('abs', 0.0)
+            # Valores Intermedios (Pendientes)
+            p_pct_int = dict_proy_pend_pct.get(candidato, p_pct)
+            p_abs_int = dict_proy_pend_abs.get(candidato, p_abs)
+
+            moe_pct = margin_of_error_100.get(candidato, {}).get('pct', 0.0)
+            moe_abs = margin_of_error_100.get(candidato, {}).get('abs', 0.0)
 
             ay_offset = ay_opts[i % len(ay_opts)]
             ax_start = ax_start_opts[i % len(ax_start_opts)]
@@ -375,13 +392,26 @@ def render_projections_and_layout(df_filtrado, min_x, dict_proy_abs, dict_proy_p
                     bgcolor="rgba(255,255,255,0.9)", bordercolor="black", borderwidth=1, borderpad=2
                 )
 
-            steps_x = np.linspace(last_x, 100, 11)
-            steps_y_pct = np.linspace(last_y_pct, p_pct, 11)
-            steps_y_abs = np.linspace(last_y_abs, p_abs, 11)
+            # Trayectoria: Último Corte -> Intermedio (Pendientes) -> 100% (JEE)
+            steps_x = [last_x, x_intermedio, 100]
+            steps_y_pct = [last_y_pct, p_pct_int, p_pct]
+            steps_y_abs = [last_y_abs, p_abs_int, p_abs]
 
-            fig_pct.add_trace(from_plotly.Scatter(x=steps_x, y=steps_y_pct, mode='lines+markers', line=dict(color=color, width=2.5, dash='dot'), marker=dict(size=5, opacity=0.8), showlegend=False))
-            fig_abs.add_trace(from_plotly.Scatter(x=steps_x, y=steps_y_abs, mode='lines+markers', line=dict(color=color, width=2.5, dash='dot'), marker=dict(size=5, opacity=0.8), showlegend=False))
+            # Trazar línea de proyección con puntos intermedios
+            fig_pct.add_trace(from_plotly.Scatter(
+                x=steps_x, y=steps_y_pct, mode='lines+markers',
+                line=dict(color=color, width=2.5, dash='dot'),
+                marker=dict(symbol=['circle', 'square', 'star'], size=[0, 8, 0], color=color),
+                showlegend=False
+            ))
+            fig_abs.add_trace(from_plotly.Scatter(
+                x=steps_x, y=steps_y_abs, mode='lines+markers',
+                line=dict(color=color, width=2.5, dash='dot'),
+                marker=dict(symbol=['circle', 'square', 'star'], size=[0, 8, 0], color=color),
+                showlegend=False
+            ))
 
+            # Añadir explícitamente el punto final al 100% con márgenes de error
             fig_pct.add_trace(from_plotly.Scatter(
                 x=[100], y=[p_pct], mode='markers',
                 marker=dict(size=14, symbol='star', color=color),
@@ -429,26 +459,28 @@ def render_projections_and_layout(df_filtrado, min_x, dict_proy_abs, dict_proy_p
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1), margin=dict(t=30, b=30), height=500
     )
 
-    fig_pct.update_layout(**layout_base, title="Votos Válidos (%) - Proy. Final", yaxis=dict(gridcolor="#e0e0e0", range=[9, 18]))
-    fig_abs.update_layout(**layout_base, title="Cantidad de Votos - Proy. Final", yaxis=dict(gridcolor="#e0e0e0"))
+    fig_pct.update_layout(**layout_base, title="Votos Válidos (%) - Proy. en Fases", yaxis=dict(gridcolor="#e0e0e0", range=[9, 18]))
+    fig_abs.update_layout(**layout_base, title="Cantidad de Votos - Proy. en Fases", yaxis=dict(gridcolor="#e0e0e0"))
 
-    if dict_proy_pct and dict_proy_abs:
-        datos_finales = []
-        for cand in dict_proy_pct.keys():
-            datos_finales.append({
+    # =========================================================
+    # FUNCIÓN INTERNA PARA CREAR GRÁFICAS DE BARRAS DE RESUMEN
+    # =========================================================
+    def build_bar_chart(dict_pct, dict_abs, moe_dict):
+        datos = []
+        for cand in dict_pct.keys():
+            datos.append({
                 'Candidato': cand,
                 'Nombre': NOMBRES_CORTOS.get(cand, cand),
-                'Porcentaje': dict_proy_pct[cand],
-                'Votos': dict_proy_abs[cand],
-                'Error_Pct': margin_of_error.get(cand, {}).get('pct', 0.0),
-                'Error_Abs': margin_of_error.get(cand, {}).get('abs', 0.0)
+                'Porcentaje': dict_pct[cand],
+                'Votos': dict_abs[cand],
+                'Error_Pct': moe_dict.get(cand, {}).get('pct', 0.0),
+                'Error_Abs': moe_dict.get(cand, {}).get('abs', 0.0)
             })
-        df_final = pd.DataFrame(datos_finales)
-        df_final = df_final.sort_values('Porcentaje', ascending=True).reset_index(drop=True)
+        df_chart = pd.DataFrame(datos).sort_values('Porcentaje', ascending=True).reset_index(drop=True)
 
-        n = len(df_final)
+        n = len(df_chart)
         etiquetas = []
-        for i, row in df_final.iterrows():
+        for i, row in df_chart.iterrows():
             cand = row['Candidato']
             icono = EMOJIS_CANDIDATOS.get(cand, "👤")
             nombre_base = f"{icono} {row['Nombre']}"
@@ -459,18 +491,18 @@ def render_projections_and_layout(df_filtrado, min_x, dict_proy_abs, dict_proy_p
             else:
                 etiquetas.append(nombre_base)
 
-        df_final['Etiqueta'] = etiquetas
-        df_final['Texto_Barra'] = df_final.apply(lambda r: f"<b>{r['Porcentaje']:.2f}% ±{r['Error_Pct']:.2f}%</b> ({r['Votos']:,.0f} ±{r['Error_Abs']:,.0f})", axis=1)
+        df_chart['Etiqueta'] = etiquetas
+        df_chart['Texto_Barra'] = df_chart.apply(lambda r: f"<b>{r['Porcentaje']:.2f}% ±{r['Error_Pct']:.2f}%</b> ({r['Votos']:,.0f} ±{r['Error_Abs']:,.0f})", axis=1)
 
-        fig_bar_final = px.bar(
-            df_final, x='Porcentaje', y='Etiqueta', orientation='h',
+        fig_bar = px.bar(
+            df_chart, x='Porcentaje', y='Etiqueta', orientation='h',
             color='Candidato', color_discrete_map=CANDIDATOS_TARGET,
             text='Texto_Barra',
             error_x='Error_Pct'
         )
 
         opacidades = [0.6 if i < n-2 else 1.0 for i in range(n)]
-        fig_bar_final.update_traces(
+        fig_bar.update_traces(
             textposition='outside',
             insidetextanchor='end',
             textfont=dict(size=15, color="#ebdbb2"),
@@ -479,26 +511,36 @@ def render_projections_and_layout(df_filtrado, min_x, dict_proy_abs, dict_proy_p
             error_x=dict(thickness=2)
         )
 
-        max_x = (df_final['Porcentaje'] + df_final['Error_Pct']).max() * 1.35
-        fig_bar_final.update_layout(
+        max_x = (df_chart['Porcentaje'] + df_chart['Error_Pct']).max() * 1.35
+        fig_bar.update_layout(
             plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
             font=dict(family="VT323", size=18, color="#ebdbb2"),
             xaxis=dict(showgrid=True, gridcolor="#504945", range=[0, max_x], title=""),
             yaxis=dict(title=""),
             showlegend=False,
-            height=400,
+            height=300,  # Altura ajustada para poder ver ambas gráficas cómodamente
             margin=dict(t=10, b=0, l=0, r=0)
         )
-    else:
-        fig_bar_final = None
+        return fig_bar
+
+    fig_bar_final_pend = build_bar_chart(dict_proy_pend_pct, dict_proy_pend_abs, margin_of_error_pend) if dict_proy_pend_pct else None
+    fig_bar_final_100 = build_bar_chart(dict_proy_pct, dict_proy_abs, margin_of_error_100) if dict_proy_pct else None
 
     col_graficas, col_mapas = st.columns(2)
     with col_graficas:
         st.plotly_chart(fig_pct, use_container_width=True)
         st.plotly_chart(fig_abs, use_container_width=True)
-        if fig_bar_final:
-            st.markdown(f"<h4 style='color:#ebdbb2;'>🏁 Resumen de Posiciones al 100% (Proyección con Margen de Error al 95%)</h4>", unsafe_allow_html=True)
-            st.plotly_chart(fig_bar_final, use_container_width=True)
+
+        if fig_bar_final_pend:
+            st.markdown(f"<h4 style='color:#ebdbb2; margin-bottom: 0px;'>🛑 Posiciones al Fin de Procesamiento Normal - ONPE ({x_intermedio:.2f}%)</h4>", unsafe_allow_html=True)
+            st.markdown("<p style='font-size:0.9rem; color:#a89984; margin-top: 0px;'>Proyección asumiendo SOLO la recuperación de Actas Pendientes (Antes del flujo JEE).</p>", unsafe_allow_html=True)
+            st.plotly_chart(fig_bar_final_pend, use_container_width=True)
+
+        if fig_bar_final_100:
+            st.markdown(f"<h4 style='color:#ebdbb2; margin-bottom: 0px;'>🏁 Posiciones Finales al 100% (Con Actas Observadas)</h4>", unsafe_allow_html=True)
+            st.markdown("<p style='font-size:0.9rem; color:#a89984; margin-top: 0px;'>Proyección asumiendo la recuperación de TODAS las Actas Faltantes (Pendientes + JEE).</p>", unsafe_allow_html=True)
+            st.plotly_chart(fig_bar_final_100, use_container_width=True)
+
     with col_mapas:
         render_spatial_module(df_proy)
 
@@ -766,12 +808,10 @@ def render_methodology_section():
     Para calcular el error estadístico a nivel nacional, se emplea la fórmula de **Propagación de Varianza de Proporciones Multinomiales**. Debido a que el volumen de votos faltantes ($N_i$) y la probabilidad del candidato ($p_i$) varían por cada provincia, la varianza se calcula localmente y luego se acumula para extraer la desviación estándar nacional.
     
     $$ E_{nac} = 1.96 \\times \\frac{\\sqrt{\\sum_{i=1}^{n} [N_{i} \\times p_{i}(1 - p_{i})]}}{N_{total}} $$
-    
-    *Donde $E_{nac}$ representa el margen de error para un nivel de confianza del 95%. Este margen representa estrictamente la volatilidad estadística (error de muestreo) bajo la suposición de que los parámetros del modelo son exactos.*
     """)
 
 # ---------------------------------------------------------
-# ORQUESTADOR PRINCIPAL (ENVUELTO EN FRAGMENTO DE RECARGA AUTOMÁTICA)
+# ORQUESTADOR PRINCIPAL
 # ---------------------------------------------------------
 @st.fragment(run_every=60)
 def auto_refresh_dashboard():
@@ -787,54 +827,89 @@ def auto_refresh_dashboard():
 
     render_header(df_latest)
     render_bar_and_versus(df_latest)
-
-    # <-- NUEVO: Alerta visual de separación y metodología
     render_projection_warning()
 
     proy_100_abs = {}
     proy_100_pct = {}
-    margin_of_error = {}
+    proy_pend_abs = {}
+    proy_pend_pct = {}
+
+    margin_of_error_100 = {}
+    margin_of_error_pend = {}
+    x_intermedio = 100.0
 
     if not df_proy.empty:
+        # Calcular X intermedio (Fin de Procesamiento de Actas Pendientes)
+        df_unique_locs = df_proy[['ubicacion', 'actas_contabilizadas', 'actas_pendientes', 'total_actas']].drop_duplicates()
+        total_contab = df_unique_locs['actas_contabilizadas'].sum()
+        total_pend = df_unique_locs['actas_pendientes'].sum()
+        total_actas = df_unique_locs['total_actas'].sum()
+
+        if total_actas > 0:
+            x_intermedio = ((total_contab + total_pend) / total_actas) * 100
+
         unwanted_terms = ['VOTOS EN BLANCO', 'VOTOS NULOS', 'total de votos']
         df_latest_validos = df_latest[~df_latest['candidato_o_tipo'].str.contains('|'.join(unwanted_terms), case=False, na=False)]
 
         total_validos_actual = df_latest_validos['cantidad_votos'].sum()
-        total_validos_proyectados_faltantes = df_proy[~df_proy['candidato_o_tipo'].str.contains('|'.join(unwanted_terms), case=False, na=False)]['votos_proyectados_faltantes'].sum()
 
+        # Proyectados Faltantes Totales (JEE + Pendientes) = 100%
+        total_validos_proyectados_faltantes = df_proy[~df_proy['candidato_o_tipo'].str.contains('|'.join(unwanted_terms), case=False, na=False)]['votos_proyectados_faltantes'].sum()
         total_nacional_proyectado_100 = total_validos_actual + total_validos_proyectados_faltantes
+
+        # Proyectados Solo Pendientes (Punto Intermedio)
+        total_validos_proyectados_pendientes = df_proy[~df_proy['candidato_o_tipo'].str.contains('|'.join(unwanted_terms), case=False, na=False)]['votos_proyectados_pendientes'].sum()
+        total_nacional_proyectado_pend = total_validos_actual + total_validos_proyectados_pendientes
 
         if total_nacional_proyectado_100 > 0:
             for cand in CANDIDATOS_TARGET.keys():
                 votos_actuales_cand = df_latest[df_latest['candidato_o_tipo'] == cand]['cantidad_votos'].sum()
-                votos_proyectados_cand = df_proy[df_proy['candidato_o_tipo'] == cand]['votos_proyectados_faltantes'].sum()
 
-                votos_finales_cand = votos_actuales_cand + votos_proyectados_cand
+                # --- 1. Punto Final (100%) ---
+                votos_proyectados_cand_100 = df_proy[df_proy['candidato_o_tipo'] == cand]['votos_proyectados_faltantes'].sum()
+                votos_finales_cand = votos_actuales_cand + votos_proyectados_cand_100
                 pct_final_cand = (votos_finales_cand / total_nacional_proyectado_100) * 100
 
                 proy_100_abs[cand] = votos_finales_cand
                 proy_100_pct[cand] = pct_final_cand
 
-                # --- CÁLCULO ESTADÍSTICO DE INCERTIDUMBRE (Propagación de Varianza) ---
+                # --- 2. Punto Intermedio (Solo Pendientes) ---
+                votos_proyectados_cand_pend = df_proy[df_proy['candidato_o_tipo'] == cand]['votos_proyectados_pendientes'].sum()
+                votos_intermedios_cand = votos_actuales_cand + votos_proyectados_cand_pend
+                pct_intermedio_cand = (votos_intermedios_cand / total_nacional_proyectado_pend) * 100 if total_nacional_proyectado_pend > 0 else 0
+
+                proy_pend_abs[cand] = votos_intermedios_cand
+                proy_pend_pct[cand] = pct_intermedio_cand
+
+                # --- CÁLCULO ESTADÍSTICO DE INCERTIDUMBRE INDEPENDIENTE ---
                 df_cand_proy = df_proy[df_proy['candidato_o_tipo'] == cand]
-                var_sum = 0.0
+                var_sum_100 = 0.0
+                var_sum_pend = 0.0
 
                 for _, row in df_cand_proy.iterrows():
-                    n_i = float(row.get('votantes_validos_pendientes_est', 0))
+                    n_pend = float(row.get('votantes_validos_pendientes_est', 0))
+                    n_jee = float(row.get('votantes_validos_jee_est', 0))
+                    n_100 = n_pend + n_jee
                     p_i = float(row.get('porcentaje_valido_usado_prior', 0)) / 100.0
-                    if n_i > 0 and pd.notna(p_i):
-                        var_sum += n_i * p_i * (1.0 - p_i)
 
-                moe_abs = 1.96 * np.sqrt(var_sum) if var_sum > 0 else 0
-                moe_pct = (moe_abs / total_nacional_proyectado_100) * 100.0 if total_nacional_proyectado_100 > 0 else 0
+                    if pd.notna(p_i):
+                        if n_100 > 0:
+                            var_sum_100 += n_100 * p_i * (1.0 - p_i)
+                        if n_pend > 0:
+                            var_sum_pend += n_pend * p_i * (1.0 - p_i)
 
-                margin_of_error[cand] = {'abs': moe_abs, 'pct': moe_pct}
+                moe_abs_100 = 1.96 * np.sqrt(var_sum_100) if var_sum_100 > 0 else 0
+                moe_pct_100 = (moe_abs_100 / total_nacional_proyectado_100) * 100.0 if total_nacional_proyectado_100 > 0 else 0
 
-    render_projections_and_layout(df_filtrado, df_filtrado['actas_contabilizadas_pct'].min(), proy_100_abs, proy_100_pct, df_proy, margin_of_error)
+                moe_abs_pend = 1.96 * np.sqrt(var_sum_pend) if var_sum_pend > 0 else 0
+                moe_pct_pend = (moe_abs_pend / total_nacional_proyectado_pend) * 100.0 if total_nacional_proyectado_pend > 0 else 0
+
+                margin_of_error_100[cand] = {'abs': moe_abs_100, 'pct': moe_pct_100}
+                margin_of_error_pend[cand] = {'abs': moe_abs_pend, 'pct': moe_pct_pend}
+
+    render_projections_and_layout(df_filtrado, proy_100_abs, proy_100_pct, proy_pend_abs, proy_pend_pct, x_intermedio, df_proy, margin_of_error_100, margin_of_error_pend)
     render_bottom_totals(df_proy)
     render_legal_strategy_map(df_proy, df_actas)
-
-    # <-- NUEVO: Bloque de texto con la metodología matemática
     render_methodology_section()
 
 # Llamada principal a la aplicación
