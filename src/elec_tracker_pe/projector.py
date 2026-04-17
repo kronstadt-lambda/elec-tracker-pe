@@ -2,7 +2,7 @@ import json
 import pandas as pd
 from pathlib import Path
 from datetime import datetime
-from .config import DATA_DIR # Asegúrate que la importación relativa/absoluta esté bien según tu proyecto
+from .config import DATA_DIR
 
 class ElectionProjector:
     def __init__(self):
@@ -19,31 +19,10 @@ class ElectionProjector:
         # ===============================================================
         # PARÁMETROS DE SESGO Y DISTORSIÓN (AJUSTABLES CENTRALIZADOS)
         # ===============================================================
-
-        # 1. Sesgo de Profundidad Rural: Asume estadísticamente que las actas
-        # faltantes provienen de zonas más alejadas/rurales dentro de la provincia.
-        # Hacia arriba (ej. 0.2): El modelo asume que las actas que faltan vienen de zonas extremadamente aisladas ("Perú profundo"). Esto favorece mucho a los candidatos rurales y castiga más fuerte a los urbanos.
-        # Hacia abajo (ej. 0.0): El modelo asume que el voto restante es idéntico al ya contado. La proyección se vuelve más lineal y neutral.
         self.RURAL_PENALTY = 0.1
-
-        # 2. Distorsión Máxima: Tope porcentual de variación que permite el modelo.
-        # Es el "volumen" o la sensibilidad general de todo el ajuste.
-        # Hacia arriba (ej. 15.0): Las proyecciones se vuelven muy volátiles y "valientes". Pequeñas diferencias de afinidad causarán grandes cambios en los porcentajes finales.
-        # Hacia abajo (ej. 3.0): El modelo se vuelve muy conservador. Los porcentajes proyectados se mantendrán muy cerca de los valores actuales que reporta la ONPE.
         self.DISTORSION_MAX_PCT = 5.0
-
-        # 3. Amortiguador Voto Duro (CASO A: Candidato Rural en Zona Urbana):
-        # Suaviza la caída del candidato rural protegiendo su núcleo duro de votantes.
-        # Hacia arriba (ej. 0.8): Menos protección. El candidato rural perderá porcentaje rápidamente en las proyecciones de zonas urbanas.
-        # Hacia abajo (ej. 0.1): Más protección. El modelo asume que el candidato rural tiene un "voto duro" que no baja de cierto nivel, aunque la zona proyectada sea muy urbana.
         self.AMORTIGUADOR_VOTO_DURO = 0.4
-
-        # 4. Factor Canibalización (CASO B: Candidato Urbano en Zona Urbana):
-        # Frena el crecimiento irreal por alta competencia reteniendo solo una fracción del ajuste.
-        # Hacia arriba (ej. 0.9): Crecimiento libre. El candidato urbano capturará casi todo el "bonus" de votos proyectados en las ciudades.
-        # Hacia abajo (ej. 0.2): Crecimiento limitado. El modelo asume que hay demasiada competencia entre candidatos similares en la ciudad y frena cuánto puede crecer cada uno individualmente.
         self.FACTOR_CANIBALIZACION = 0.75
-
         # ===============================================================
 
         self._build_geo_maps()
@@ -79,7 +58,6 @@ class ElectionProjector:
         prov_data = self.afinidad_data.get("provincias_y_continentes", {}).get(carpeta_limpia, {})
         base_rurality = prov_data.get("ruralidad_score_proxy", 0.5)
 
-        # F dinámico aplicando la penalidad rural fija
         F = min(1.0, base_rurality + self.RURAL_PENALTY)
         M = (F - 0.5) * 2
 
@@ -95,11 +73,10 @@ class ElectionProjector:
 
             ajuste = M * A_i * self.DISTORSION_MAX_PCT
 
-            # --- GESTIÓN ASIMÉTRICA CON PARÁMETROS CENTRALIZADOS ---
             if M < 0:
-                if A_i > 0: # Candidato Rural en Zona Urbana
+                if A_i > 0:
                     ajuste = ajuste * self.AMORTIGUADOR_VOTO_DURO
-                elif A_i < 0: # Candidato Urbano en Zona Urbana
+                elif A_i < 0:
                     ajuste = ajuste * self.FACTOR_CANIBALIZACION
 
             pct_nuevo = max(0.0, pct_base + ajuste)
@@ -112,7 +89,6 @@ class ElectionProjector:
             })
             suma_nuevos_pct += pct_nuevo
 
-        # Normalizar
         for item in candidatos_ajustados:
             if suma_nuevos_pct > 0:
                 item["pct_proyectado"] = (item["pct_crudo"] / suma_nuevos_pct) * 100.0
@@ -122,7 +98,7 @@ class ElectionProjector:
         return candidatos_ajustados
 
     def generate_projections(self):
-        print("📊 Generando proyección unificada (Escenario Realista c/JEE)...")
+        print("📊 Generando proyección unificada (Escenario Realista c/JEE separado)...")
 
         projections_final = []
         needs_imputation = []
@@ -157,22 +133,57 @@ class ElectionProjector:
             total_padron = ausentes + asistentes
             tasa_ausentismo = (ausentes / total_padron) if total_padron > 0 else 0
 
-            # ESCENARIO ÚNICO: Se consideran las actas al JEE como recuperables
-            votantes_validos_est = ((g_jee + g_pend) * ratio_electores_acta) * (1 - tasa_ausentismo)
+            # Calculamos la tasa real de votos Válidos vs Emitidos en esa provincia
+            total_validos_actual = sum(self._safe_float(r['cantidad_votos']) for _, r in df.iterrows())
+            ratio_validos_vs_emitidos = (total_validos_actual / asistentes) if asistentes > 0 else 1.0
 
+            # =======================================================
+            # CÁLCULOS EN CASCADA (AUSENTES -> EMITIDOS -> VÁLIDOS)
+            # =======================================================
+            electores_pend_est = g_pend * ratio_electores_acta
+            electores_jee_est = g_jee * ratio_electores_acta
+
+            votantes_ausentes_pend_est = electores_pend_est * tasa_ausentismo
+            votantes_ausentes_jee_est = electores_jee_est * tasa_ausentismo
+            votantes_ausentes_est = votantes_ausentes_pend_est + votantes_ausentes_jee_est
+
+            votantes_emitidos_pend_est = electores_pend_est * (1 - tasa_ausentismo)
+            votantes_emitidos_jee_est = electores_jee_est * (1 - tasa_ausentismo)
+            votantes_emitidos_est = votantes_emitidos_pend_est + votantes_emitidos_jee_est
+
+            votantes_validos_pendientes_est = votantes_emitidos_pend_est * ratio_validos_vs_emitidos
+            votantes_validos_jee_est = votantes_emitidos_jee_est * ratio_validos_vs_emitidos
+            votantes_validos_est = votantes_validos_pendientes_est + votantes_validos_jee_est
+            # =======================================================
+
+            # Guardamos todo el contexto de la provincia en data_base para evitar mezclas
             data_base = {
                 "ubicacion": row_base['ubicacion'],
                 "actualizado_dt": row_base['actualizado_dt'],
-                "avance_actas_pct": round(g_contab / total_actas, 4) if total_actas > 0 else 0
+                "avance_actas_pct": round(g_contab / total_actas, 4) if total_actas > 0 else 0,
+
+                # --- NUEVAS COLUMNAS DE ACTAS DETALLADAS ---
+                "actas_contabilizadas": int(g_contab),
+                "actas_pendientes": int(g_pend),
+                "actas_jee": int(g_jee),
+                "total_actas": int(total_actas),
+
+                # --- MÉTRICAS DEMOGRÁFICAS ---
+                "votantes_ausentes_est": round(votantes_ausentes_est, 2),
+                "votantes_emitidos_pendientes_est": round(votantes_emitidos_pend_est, 2),
+                "votantes_emitidos_jee_est": round(votantes_emitidos_jee_est, 2),
+                "votantes_validos_pendientes_est": round(votantes_validos_pendientes_est, 2),
+                "votantes_validos_jee_est": round(votantes_validos_jee_est, 2),
+                "votantes_validos_est_interno": votantes_validos_est # Matemáticas internas
             }
 
             if g_contab == 0:
-                needs_imputation.append((folder_name, data_base, votantes_validos_est, df))
+                # Tupla limpia con su propio entorno aislado
+                needs_imputation.append((folder_name, data_base, df))
             else:
                 region = self.prov_to_region.get(folder_name, "EXTRANJERO")
                 if region not in regional_valid_pcts: regional_valid_pcts[region] = {}
 
-                # Guardar base para imputación
                 for _, row in df.iterrows():
                     cand = row['candidato_o_tipo']
                     pct_base = self._safe_float(row['porcentaje_valido'])
@@ -182,7 +193,6 @@ class ElectionProjector:
                 candidatos_con_prior = self._calcular_porcentajes_distorsionados(folder_name, df)
 
                 d_final = data_base.copy()
-                d_final["votantes_validos_pendientes_est"] = round(votantes_validos_est, 2)
                 d_final["candidatos"] = []
 
                 for item in candidatos_con_prior:
@@ -192,7 +202,9 @@ class ElectionProjector:
                         "candidato_o_tipo": cand, "agrupacion": item["agrupacion"],
                         "porcentaje_valido_base": item["pct_base"],
                         "porcentaje_valido_usado": round(pct_final, 3),
-                        "votos_proyectados_faltantes": round(votantes_validos_est * (pct_final / 100.0), 0)
+                        "votos_proyectados_faltantes": round(votantes_validos_est * (pct_final / 100.0), 0),
+                        "votos_proyectados_pendientes": round(votantes_validos_pendientes_est * (pct_final / 100.0), 0),
+                        "votos_proyectados_jee": round(votantes_validos_jee_est * (pct_final / 100.0), 0)
                     })
 
                 projections_final.append(d_final)
@@ -200,8 +212,12 @@ class ElectionProjector:
         # =======================================================
         # RESOLUCIÓN DE IMPUTACIONES
         # =======================================================
-        for folder_name, data_base, votantes_validos_est, df in needs_imputation:
+        for folder_name, data_base, df in needs_imputation:
             region = self.prov_to_region.get(folder_name, "EXTRANJERO")
+
+            votantes_validos_est = data_base["votantes_validos_est_interno"]
+            votantes_validos_pendientes_est = data_base["votantes_validos_pendientes_est"]
+            votantes_validos_jee_est = data_base["votantes_validos_jee_est"]
 
             temp_rows = []
             for _, row in df.iterrows():
@@ -220,7 +236,6 @@ class ElectionProjector:
             candidatos_imputados = self._calcular_porcentajes_distorsionados(folder_name, df_imputado)
 
             d_final = data_base.copy()
-            d_final["votantes_validos_pendientes_est"] = round(votantes_validos_est, 2)
             d_final["observacion"] = f"Imputado de {region} + Prior"
             d_final["candidatos"] = []
 
@@ -230,14 +245,14 @@ class ElectionProjector:
                     "candidato_o_tipo": item["cand"], "agrupacion": item["agrupacion"],
                     "porcentaje_valido_base": round(item["pct_base"], 3),
                     "porcentaje_valido_usado": round(pct_final, 3),
-                    "votos_proyectados_faltantes": round(votantes_validos_est * (pct_final / 100.0), 0)
+                    "votos_proyectados_faltantes": round(votantes_validos_est * (pct_final / 100.0), 0),
+                    "votos_proyectados_pendientes": round(votantes_validos_pendientes_est * (pct_final / 100.0), 0),
+                    "votos_proyectados_jee": round(votantes_validos_jee_est * (pct_final / 100.0), 0)
                 })
 
             projections_final.append(d_final)
 
-        # =======================================================
         # GUARDADO ÚNICO
-        # =======================================================
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
         self._flatten_and_save(projections_final, "proyeccion_final", ts)
 
@@ -249,12 +264,26 @@ class ElectionProjector:
                     "ubicacion": loc["ubicacion"],
                     "actualizado_dt": loc["actualizado_dt"],
                     "avance_actas_pct": loc["avance_actas_pct"],
-                    "votantes_validos_pendientes_est": loc["votantes_validos_pendientes_est"],
+
+                    # --- NUEVAS COLUMNAS DE ACTAS SEPARADAS ---
+                    "actas_contabilizadas": loc.get("actas_contabilizadas", 0),
+                    "actas_pendientes": loc.get("actas_pendientes", 0),
+                    "actas_jee": loc.get("actas_jee", 0),
+                    "total_actas": loc.get("total_actas", 0),
+
+                    "votantes_ausentes_est": loc.get("votantes_ausentes_est", 0),
+                    "votantes_emitidos_pendientes_est": loc.get("votantes_emitidos_pendientes_est", 0),
+                    "votantes_emitidos_jee_est": loc.get("votantes_emitidos_jee_est", 0),
+                    "votantes_validos_pendientes_est": loc.get("votantes_validos_pendientes_est", 0),
+                    "votantes_validos_jee_est": loc.get("votantes_validos_jee_est", 0),
+
                     "candidato_o_tipo": cand["candidato_o_tipo"],
                     "agrupacion": cand["agrupacion"],
                     "porcentaje_valido_base": cand["porcentaje_valido_base"],
                     "porcentaje_valido_usado_prior": cand["porcentaje_valido_usado"],
                     "votos_proyectados_faltantes": cand["votos_proyectados_faltantes"],
+                    "votos_proyectados_pendientes": cand["votos_proyectados_pendientes"],
+                    "votos_proyectados_jee": cand["votos_proyectados_jee"],
                     "observacion": loc.get("observacion", "Data real")
                 })
 
