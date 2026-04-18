@@ -145,19 +145,21 @@ def render_dashboard_closure_warning():
     st.markdown("""
     <div style="background-color: #3c1518; border-left: 5px solid #fb4934; padding: 20px; border-radius: 5px; margin-bottom: 25px;">
         <h3 style="margin-top:0; color: #fb4934 !important;">🚨 AVISO CRÍTICO: SUSPENSIÓN DE PROYECCIONES POR DATA ESPURIA</h3>
-        <p style="font-family: 'Arial', sans-serif; font-size: 1.1rem; color: #ebdbb2; line-height: 1.5;">
-            A lo largo de nuestro monitoreo concurrente, ha quedado evidenciado que no solo el procedimiento operativo de la ONPE presenta graves deficiencias, sino que su <strong>sistema informático acumula múltiples vicios, incongruencias matemáticas y denuncias</strong> por alteraciones inexplicables en la base de datos (votos sin origen verificable).
-        </p>
-        <p style="font-family: 'Arial', sans-serif; font-size: 1.1rem; color: #ebdbb2; line-height: 1.5;">
-            Resulta técnica y matemáticamente ilógico alimentar un modelo predictivo utilizando una fuente de datos espuria, errática y de dudosa integridad.
-        </p>
+        <p style="font-family: 'Arial', sans-serif; font-size: 1.1rem; color: #ebdbb2; line-height: 1.5;">A lo largo de nuestro monitoreo concurrente, ha quedado evidenciado que no solo el procedimiento operativo de la ONPE presenta graves deficiencias, sino que su <strong>sistema informático acumula múltiples vicios, incongruencias matemáticas y denuncias</strong> por alteraciones inexplicables en la base de datos (votos sin origen verificable).</p>
+        <p style="font-family: 'Arial', sans-serif; font-size: 1.1rem; color: #ebdbb2; line-height: 1.5;">Resulta técnica y matemáticamente ilógico alimentar un modelo predictivo utilizando una fuente de datos espuria, errática y de dudosa integridad.</p>
         <hr style="border-color: #fb4934; opacity: 0.3; margin: 15px 0;">
-        <p style="font-family: 'Arial', sans-serif; font-size: 1.1rem; color: #fabd2f; font-weight: bold; line-height: 1.5; margin-bottom: 0;">
-            🛑 ACCIÓN TOMADA: Se suspende la publicación de proyecciones electorales.
-        </p>
-        <p style="font-family: 'Arial', sans-serif; font-size: 1rem; color: #a89984; line-height: 1.5; margin-top: 5px;">
-            A partir de este momento, este dashboard y nuestra infraestructura de scraping de datos se dedicarán <strong>exclusivamente a auditar y fiscalizar la base de datos oficial</strong>. Nos enfocaremos en rastrear, documentar y exponer cualquier anomalía o posible manipulación del sistema informático que pretenda perjudicar o beneficiar a cualquier candidato.
-        </p>
+        <p style="font-family: 'Arial', sans-serif; font-size: 1.05rem; color: #ebdbb2; margin-bottom: 5px;"><strong>⚠️ Reportes Ciudadanos y Evidencia de Contingencias:</strong><br>Registros de mesas no instaladas, demoras injustificadas y presunto sabotaje documentado en redes y medios:</p>
+        <ul style="font-family: 'Arial', sans-serif; font-size: 0.95rem; line-height: 1.6;">
+            <li><a href="https://x.com/DorisCateriano/status/2045364312076681706" target="_blank" style="color: #83a598; text-decoration: none;">Link 1</a></li>
+            <li><a href="https://x.com/RPPNoticias/status/2045540540423303395" target="_blank" style="color: #83a598; text-decoration: none;">Link 2</a></li>
+            <li><a href="https://x.com/gvillasis/status/2045580704877093226" target="_blank" style="color: #83a598; text-decoration: none;">Link 3</a></li>
+            <li><a href="https://x.com/opene_election/status/2045552980968050983" target="_blank" style="color: #83a598; text-decoration: none;">Link 3</a></li>
+            <li><a href="https://x.com/KarlaCalle/status/2045450279584227639" target="_blank" style="color: #83a598; text-decoration: none;">Link 4</a></li>
+            <li><a href="https://x.com/garedat/status/2045538762365550884" target="_blank" style="color: #83a598; text-decoration: none;">Link 5</a></li>
+        </ul>
+        <hr style="border-color: #fb4934; opacity: 0.3; margin: 15px 0;">
+        <p style="font-family: 'Arial', sans-serif; font-size: 1.1rem; color: #fabd2f; font-weight: bold; line-height: 1.5; margin-bottom: 0;">🛑 ACCIÓN TOMADA: Se suspende la publicación de proyecciones electorales.</p>
+        <p style="font-family: 'Arial', sans-serif; font-size: 1rem; color: #a89984; line-height: 1.5; margin-top: 5px;">A partir de este momento, este dashboard y nuestra infraestructura de scraping de datos se dedicarán <strong>exclusivamente a auditar y fiscalizar la base de datos oficial</strong>. Nos enfocaremos en rastrear, documentar y exponer cualquier anomalía o posible manipulación del sistema informático que pretenda perjudicar o beneficiar a cualquier candidato.</p>
     </div>
     """, unsafe_allow_html=True)
 
