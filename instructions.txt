@@ -38,3 +38,6 @@ poetry run python -m src.elec_tracker_pe.affinity_calculator
 
 Para ejecutar la proyeccion, se debe ejecutar el siguiente comando:
 poetry run python -m src.elec_tracker_pe.projector
+
+Para ejecutar el servicio de auditor, se debe ejecutar el siguiente comando:
+poetry run python -m src.elec_tracker_pe.auditor

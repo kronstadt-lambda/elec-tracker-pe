@@ -15,7 +15,7 @@ from utils_graphs import (
 # CONFIGURACIÓN GENERAL (FEATURE FLAGS)
 # ---------------------------------------------------------
 # Cambia a True si los servidores de la ONPE vuelven a fallar
-MOSTRAR_ALERTA_ONPE = False
+MOSTRAR_ALERTA_ONPE = True
 
 # ---------------------------------------------------------
 # CONFIGURACIÓN Y ESTILOS
@@ -141,16 +141,22 @@ def render_bar_and_versus(df_latest):
         else:
             st.info("Esperando datos de ambos candidatos para la comparación.")
 
-def render_onpe_maintenance_warning():
+def render_dashboard_closure_warning():
     st.markdown("""
-    <div class="error-box">
-        <h3 style="margin-top:0; color: #fb4934 !important;">🚨 AVISO CRÍTICO: DISCREPANCIAS EN LA FUENTE OFICIAL (ONPE)</h3>
-        <p style="font-family: 'Arial', sans-serif; font-size: 1rem; color: #ebdbb2;">
-            Se han detectado incongruencias y datos erráticos provenientes directamente de los servidores públicos de la ONPE. Estas anomalías alteran e introducen un margen de error externo a nuestra proyección de datos.
+    <div style="background-color: #3c1518; border-left: 5px solid #fb4934; padding: 20px; border-radius: 5px; margin-bottom: 25px;">
+        <h3 style="margin-top:0; color: #fb4934 !important;">🚨 AVISO CRÍTICO: SUSPENSIÓN DE PROYECCIONES POR DATA ESPURIA</h3>
+        <p style="font-family: 'Arial', sans-serif; font-size: 1.1rem; color: #ebdbb2; line-height: 1.5;">
+            A lo largo de nuestro monitoreo concurrente, ha quedado evidenciado que no solo el procedimiento operativo de la ONPE presenta graves deficiencias, sino que su <strong>sistema informático acumula múltiples vicios, incongruencias matemáticas y denuncias</strong> por alteraciones inexplicables en la base de datos (votos sin origen verificable).
         </p>
-        <p style="font-family: 'Arial', sans-serif; font-size: 1rem; color: #ebdbb2;">
-            La ONPE ha confirmado oficialmente que su sistema se encuentra bajo <strong>mantenimiento</strong>. Recomendamos tomar las variaciones bruscas con cautela hasta que se estabilice el flujo oficial de actas.<br><br>
-            🔗 <a href="https://x.com/ONPE_oficial/status/2045181850826482127" target="_blank" style="color: #fe8019; font-weight: bold; text-decoration: underline;">Ver confirmación oficial de la ONPE en X (Twitter)</a>
+        <p style="font-family: 'Arial', sans-serif; font-size: 1.1rem; color: #ebdbb2; line-height: 1.5;">
+            Resulta técnica y matemáticamente ilógico alimentar un modelo predictivo utilizando una fuente de datos espuria, errática y de dudosa integridad.
+        </p>
+        <hr style="border-color: #fb4934; opacity: 0.3; margin: 15px 0;">
+        <p style="font-family: 'Arial', sans-serif; font-size: 1.1rem; color: #fabd2f; font-weight: bold; line-height: 1.5; margin-bottom: 0;">
+            🛑 ACCIÓN TOMADA: Se suspende la publicación de proyecciones electorales.
+        </p>
+        <p style="font-family: 'Arial', sans-serif; font-size: 1rem; color: #a89984; line-height: 1.5; margin-top: 5px;">
+            A partir de este momento, este dashboard y nuestra infraestructura de scraping de datos se dedicarán <strong>exclusivamente a auditar y fiscalizar la base de datos oficial</strong>. Nos enfocaremos en rastrear, documentar y exponer cualquier anomalía o posible manipulación del sistema informático que pretenda perjudicar o beneficiar a cualquier candidato.
         </p>
     </div>
     """, unsafe_allow_html=True)
@@ -860,7 +866,7 @@ def auto_refresh_dashboard():
     # CONDICIONAL: AVISO DE MANTENIMIENTO ONPE
     # ---------------------------------------------------------
     if MOSTRAR_ALERTA_ONPE:
-        render_onpe_maintenance_warning()
+        render_dashboard_closure_warning()
 
     render_projection_warning()
 
