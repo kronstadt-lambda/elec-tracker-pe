@@ -83,7 +83,7 @@ def fetch_cached_data():
 # MÓDULOS DE VISUALIZACIÓN Y TEXTO
 # ---------------------------------------------------------
 def render_header(df_latest):
-    st.markdown(f"### 📡 RADAR ELECTORAL · ACTUALIZADO: {df_latest['actualizado_dt'].iloc[0]} · CORTE ONPE: {df_latest['actas_contabilizadas_pct'].iloc[0]}%")
+    st.markdown(f"### 📡 RADAR ELECTORAL · ACTUALIZADO: {df_latest['actualizado_dt'].iloc[0]} · CORTE ONPE: {df_latest['actas_contabilizadas_pct'].iloc[0]}% (SE SUSPENDE LA ACTUALIZACION)")
 
 def render_bar_and_versus(df_latest):
     col_bar, col_vs = st.columns([1.2, 1])
