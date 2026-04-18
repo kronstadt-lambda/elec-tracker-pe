@@ -12,6 +12,12 @@ from utils_graphs import (
 )
 
 # ---------------------------------------------------------
+# CONFIGURACIÓN GENERAL (FEATURE FLAGS)
+# ---------------------------------------------------------
+# Cambia a True si los servidores de la ONPE vuelven a fallar
+MOSTRAR_ALERTA_ONPE = False
+
+# ---------------------------------------------------------
 # CONFIGURACIÓN Y ESTILOS
 # ---------------------------------------------------------
 st.set_page_config(page_title="ONPE Tracker Radar (Público)", layout="wide")
@@ -850,8 +856,11 @@ def auto_refresh_dashboard():
     render_header(df_latest)
     render_bar_and_versus(df_latest)
 
-    # NUEVA ADVERTENCIA INSERTADA AQUÍ
-    render_onpe_maintenance_warning()
+    # ---------------------------------------------------------
+    # CONDICIONAL: AVISO DE MANTENIMIENTO ONPE
+    # ---------------------------------------------------------
+    if MOSTRAR_ALERTA_ONPE:
+        render_onpe_maintenance_warning()
 
     render_projection_warning()
 
